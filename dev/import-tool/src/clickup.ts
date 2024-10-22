@@ -91,7 +91,7 @@ export async function importClickUp (
   }
 
   console.log('========================================' )
-  console.log('IMPORT DATA STRUCTURE: ', importData )
+  console.log('IMPORT DATA STRUCTURE: ', JSON.stringify(importData, null, 4) )
   console.log('========================================' )
   await new WorkspaceImporter(client, fileUploader, importData).performImport()
 }
@@ -101,7 +101,10 @@ function processClickupWiki(fullPath: string): ImportDocument {
     class: 'document.class.Document',
     title: parse(fullPath).name,
     descrProvider: async () => {
-      return (await readFile(fullPath)).toString()
+      const description = await readFile(fullPath)
+      console.log(description.toString())
+      console.log(description.toString())
+      return description.toString()
     },
     subdocs: []
   }
