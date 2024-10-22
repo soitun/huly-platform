@@ -163,7 +163,7 @@ export class WorkspaceImporter {
           return {
             name: status.name,
             ofAttribute: tracker.attribute.IssueStatus,
-            category: task.statusCategory.UnStarted
+            category: task.statusCategory.UnStarted     //todo: Unsorted?
           }
         })
         taskTypes.push({
@@ -317,7 +317,7 @@ export class WorkspaceImporter {
     await this.client.createDoc(tracker.class.Project, core.space.Space, projectData, projectId)
     // Add space type's mixin with roles assignments
     // const CLICKUP_MIXIN_ID = `${CLICKUP_TASK_TYPE_ID}:type:mixin` as Ref<Class<Task>>
-    const mixinId = `${this.projectTypeByName.get(project.name)}:type:mixin` as Ref<Mixin<Project>>
+    const mixinId = `${this.projectTypeByName.get(project.projectType.name)}:type:mixin` as Ref<Mixin<Project>>
     await this.client.createMixin(projectId, tracker.class.Project, core.space.Space, mixinId, {})
     return projectId
   }

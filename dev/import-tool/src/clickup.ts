@@ -102,6 +102,7 @@ async function processClickupTasks (
   await processTasksCsv(file, async (clickupTask) => {
     const importIssue = await convertToImportIssue(clickupTask) as ImportIssueEx
     importIssue.clickupParentId = clickupTask['Parent ID']
+    importIssue.clickupProjectName = clickupTask['Space Name']
     importIssuesByClickupId.set(clickupTask['Task ID'], importIssue)
     
     statuses.add(clickupTask.Status)
@@ -115,7 +116,7 @@ async function processClickupTasks (
     importProjectsByName.set(projectName, {
       class: 'tracker.class.Project',
       name: projectName,
-      identifier: projectName.toUpperCase(),
+      identifier: getIdentifier(projectName),
       private: false,
       autoJoin: false,
       projectType: importProjectType,
@@ -124,13 +125,13 @@ async function processClickupTasks (
   }
 
   for (const [clickupId, issue] of importIssuesByClickupId) {
-    if (issue.clickupParentId !== undefined) {
+    if (issue.clickupParentId !== undefined && issue.clickupParentId !== 'null') {
       const parent = importIssuesByClickupId.get(issue.clickupParentId)
       if (parent === undefined) {
         throw new Error(`Parent not found: ${issue.clickupParentId} (for task: ${clickupId})`)
       }
       parent.subdocs.push(issue)
-    } else if (issue.clickupProjectName !== undefined) {
+    } else if (issue.clickupProjectName !== undefined && issue.clickupProjectName !== 'null') { // todo: blank string
       const project = importProjectsByName.get(issue.clickupProjectName)
       if (project === undefined) {
         throw new Error(`Project not found: ${issue.clickupProjectName} (for task: ${clickupId})`)
@@ -147,7 +148,7 @@ async function processClickupTasks (
     projectTypes: [importProjectType]
   }
 
-  new WorkspaceImporter(client, uploadFile, importClickupData).performImport()
+  await new WorkspaceImporter(client, uploadFile, importClickupData).performImport()
 }
 
 async function convertToImportIssue (clickup: ClickupTask): Promise<ImportIssue> {
@@ -310,3 +311,11 @@ function createClickupImportWs(taskStatuses: string[]): ImportWorkspace {
   }]
  }
 }
+
+function getIdentifier(projectName: string): string {
+  return projectName.toUpperCase()
+    .replaceAll('-', '_')
+    .replaceAll(' ', '_')
+    .substring(0, 5)
+}
+
