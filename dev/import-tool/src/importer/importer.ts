@@ -260,7 +260,7 @@ export class WorkspaceImporter {
 
     const attachedData: Data<Document> = {
       title: doc.title,
-      description: collabId,
+      content: collabId,
       parent: parentId,
       attachments: 0,
       embeddings: 0,
