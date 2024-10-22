@@ -361,7 +361,12 @@ export class WorkspaceImporter {
       comments: issue.comments?.length ?? 0,
       subIssues: 0, // todo
       dueDate: null,
-      parents: [], // todo
+      parents: [{
+        parentId,
+        parentTitle: '',
+        space: projectId,
+        identifier: ''
+      }], // todo
       reportedTime: 0,
       remainingTime: issue.remainingTime ?? 0,
       estimation: issue.estimation ?? 0,

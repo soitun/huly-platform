@@ -1,29 +1,15 @@
-import core, {
-  type Class,
-  collaborativeDocParse,
-  type Data,
-  generateId,
-  makeCollaborativeDoc,
-  type Ref,
+import {
   type Timestamp,
   type TxOperations
 } from '@hcengineering/core'
 import { type FileUploader } from './fileUploader'
-import document, { getFirstRank, type Document, type Teamspace } from '@hcengineering/document'
-import tracker, {
+import {
   type Issue,
-  type IssueStatus,
-  type Project,
-  TimeReportDayType
 } from '@hcengineering/tracker'
-import { jsonToYDocNoSchema, parseMessageMarkdown } from '@hcengineering/text'
-import { yDocToBuffer } from '@hcengineering/collaboration'
 import { readdir } from 'fs/promises'
 import { join, parse } from 'path'
 import csv from 'csvtojson'
-import task, { createProjectType, makeRank, type ProjectType, type Task, type TaskType } from '@hcengineering/task'
-import { importIssue, type ImportIssue as ImportIssueOld } from './importer/utils'
-import { ImportComment, ImportIssue, ImportProject, ImportProjectType, ImportSpace, ImportWorkspace, WorkspaceImporter } from './importer/importer'
+import { ImportComment, ImportIssue, ImportProject, ImportProjectType, WorkspaceImporter } from './importer/importer'
 
 interface ClickupTask {
   'Task ID': string
@@ -56,10 +42,6 @@ interface ImportIssueEx extends ImportIssue {
   clickupParentId?: string
   clickupProjectName?: string
 }
-
-const CLICKUP_PROJECT_TYPE_ID = generateId<ProjectType>()
-const CLICKUP_TASK_TYPE_ID = generateId<TaskType>()
-const CLICKUP_MIXIN_ID = `${CLICKUP_TASK_TYPE_ID}:type:mixin` as Ref<Class<Task>>
 
 export async function importClickUp (
   client: TxOperations,
@@ -204,76 +186,15 @@ function fixMultilineString (content: string) {
   return content.split('\\n').join('\n')
 }
 
-async function importPageDocument (
-  client: TxOperations,
-  uploadFile: FileUploader,
-  name: string,
-  data: Buffer,
-  space: Ref<Teamspace>
-): Promise<void> {
-  const md = data.toString() ?? ''
-  const json = parseMessageMarkdown(md ?? '', 'image://')
-
-  const id = generateId<Document>()
-  const collabId = makeCollaborativeDoc(id, 'description')
-  const yDoc = jsonToYDocNoSchema(json, 'content')
-  const { documentId } = collaborativeDocParse(collabId)
-  const buffer = yDocToBuffer(yDoc)
-
-  const form = new FormData()
-  const file = new File([new Blob([buffer])], name)
-  form.append('file', file, documentId)
-  form.append('type', 'application/ydoc')
-  form.append('size', buffer.length.toString())
-  form.append('name', name)
-  form.append('id', id)
-  form.append('data', new Blob([buffer])) // ?
-
-  await uploadFile(id, form)
-
-  const parent = document.ids.NoParent
-  const lastRank = await getFirstRank(client, space, parent)
-  const rank = makeRank(lastRank, undefined)
-
-  const attachedData: Data<Document> = {
-    title: name,
-    description: collabId,
-    parent,
-    attachments: 0,
-    embeddings: 0,
-    labels: 0,
-    comments: 0,
-    references: 0,
-    rank
-  }
-
-  await client.createDoc(document.class.Document, space, attachedData, id)
-}
-
 export interface ClickupIssue extends Issue {
   clickupId: string
 }
 
-async function createProject (client: TxOperations, name: string, typeId: Ref<ProjectType>): Promise<Ref<Project>> {
-  const projectId = generateId<Project>()
-  const projectData = {
-    name,
-    description: '',
-    private: false,
-    members: [],
-    owners: [],
-    archived: false,
-    autoJoin: false,
-    identifier: 'AAA',
-    sequence: 0,
-    defaultAssignee: undefined,
-    defaultIssueStatus: '' as Ref<IssueStatus>,
-    defaultTimeReportDay: TimeReportDayType.PreviousWorkDay
-  }
-  await client.createDoc(tracker.class.Project, core.space.Space, { ...projectData, type: typeId }, projectId)
-  // Add space type's mixin with roles assignments
-  await client.createMixin(projectId, tracker.class.Project, core.space.Space, CLICKUP_MIXIN_ID, {})
-  return projectId
+function getIdentifier(projectName: string): string {
+  return projectName.toUpperCase()
+    .replaceAll('-', '_')
+    .replaceAll(' ', '_')
+    .substring(0, 5)
 }
 
 function createClickupProjectType(taskStatuses: string[]): ImportProjectType {
@@ -291,31 +212,3 @@ function createClickupProjectType(taskStatuses: string[]): ImportProjectType {
   }]
  }
 }
-
-function createClickupImportWs(taskStatuses: string[]): ImportWorkspace {
-  const statuses = taskStatuses.map((name) => {
-    return {
-      name
-    }
-  })
- return {
-  persons: [],
-  spaces: [],
-  projectTypes: [{
-    name: 'ClickUp project!!!',
-    description: 'For issues imported from ClickUp!!!',
-    taskTypes: [{
-      name: 'ClickUp issue',
-      statuses
-    }]
-  }]
- }
-}
-
-function getIdentifier(projectName: string): string {
-  return projectName.toUpperCase()
-    .replaceAll('-', '_')
-    .replaceAll(' ', '_')
-    .substring(0, 5)
-}
-
