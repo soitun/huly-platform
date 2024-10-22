@@ -12,7 +12,9 @@ import core, {
   SortingOrder,
   type Timestamp,
   type TxOperations,
-  type Blob as PlatformBlob
+  type Blob as PlatformBlob,
+  DocumentQuery,
+  Status
 } from '@hcengineering/core'
 import { type FileUploader } from '../fileUploader'
 import task, {
@@ -361,7 +363,6 @@ export class WorkspaceImporter {
       true
     )
 
-    
     const number = (incResult as any).object.sequence
     const identifier = `${project?.identifier}-${number}`
 
@@ -370,14 +371,14 @@ export class WorkspaceImporter {
 
     const collabId = await this.importIssueDescription(issueId, await issue.descrProvider())
 
-    const status = this.issueStatusByName.get(issue.status.name)
+    const status = await this.findIssueStatusByName(issue.status.name)
     const taskToCreate = {
       title: issue.title,
       description: collabId,
       assignee: null, // todo: Ref<Person>
       component: null,
       number,
-      status: status!,
+      status: status,
       priority: IssuePriority.NoPriority, // todo
       rank: makeRank(lastOne?.rank, undefined),
       comments: issue.comments?.length ?? 0,
@@ -490,4 +491,19 @@ export class WorkspaceImporter {
 
   // const file = new File([attach.blob], attach.title)
   // writeFileSync(`kitten.jpg`, new Uint8Array(await file.arrayBuffer()))
+
+  async findIssueStatusByName(name: string): Promise<Ref<IssueStatus>> {
+    const query: DocumentQuery<Status> = { 
+      name,
+      ofAttribute: tracker.attribute.IssueStatus,
+      category: task.statusCategory.UnStarted
+    }
+    
+    const status = await this.client.findOne(tracker.class.IssueStatus, query)
+    if (status === undefined) {
+      throw new Error("Issue status not found: " + name)
+    }
+
+    return status._id
+  }
 }
