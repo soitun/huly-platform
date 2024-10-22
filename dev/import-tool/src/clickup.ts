@@ -56,9 +56,9 @@ export async function importClickUp (
     const extension = parsedFileName.ext.toLowerCase()
     const fullPath = join(dir, file)
     if (extension === '.md') {
-      console.log ("MD Document")
+      console.log ("MD Document: ", fullPath)
     } else if (extension === '.csv') {
-      console.log ("CSV Tasks")
+      console.log ("CSV Tasks: ", fullPath)
       await processClickupTasks(fullPath, client, uploadFile)
     }
   }
@@ -90,6 +90,10 @@ async function processClickupTasks (
     statuses.add(clickupTask.Status)
     projects.add(clickupTask['Space Name'])
   })
+
+  console.log(projects)
+  console.log(statuses)
+  console.log(importIssuesByClickupId)
 
   const importProjectType = createClickupProjectType(Array.from(statuses))
 

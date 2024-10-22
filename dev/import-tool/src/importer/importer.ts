@@ -8,7 +8,6 @@ import core, {
   generateId,
   makeCollaborativeDoc,
   type Mixin,
-  ObjQueryType,
   type Ref,
   SortingOrder,
   type Timestamp,
@@ -27,7 +26,7 @@ import document, { type Document, type Teamspace, getFirstRank } from '@hcengine
 import { jsonToYDocNoSchema, parseMessageMarkdown } from '@hcengineering/text'
 import { yDocToBuffer } from '@hcengineering/collaboration'
 import { type Person } from '@hcengineering/contact'
-import tracker, { type Issue, IssuePriority, type IssueStatus, type Project, TimeReportDayType } from '@hcengineering/tracker'
+import tracker, { type Issue, IssueParentInfo, IssuePriority, type IssueStatus, type Project, TimeReportDayType } from '@hcengineering/tracker'
 import chunter, { type ChatMessage } from '@hcengineering/chunter'
 
 export interface ImportWorkspace {
@@ -274,9 +273,17 @@ export class WorkspaceImporter {
   }
 
   async importProject (project: ImportProject): Promise<Ref<Project>> {
+    console.log('Create project: ', project.name)
     const projectId = await this.createProject(project)
+    console.log('Project created: ' + projectId)
+
+    const hulyProject = await this.client.findOne(tracker.class.Project, { _id: projectId })
+    if (hulyProject === undefined) {
+      throw new Error('Project not found: '+ projectId)
+    }
+
     for (const issue of project.docs) {
-      await this.createIssueWithSubissues(issue, tracker.ids.NoParent, projectId)
+      await this.createIssueWithSubissues(issue, tracker.ids.NoParent, hulyProject, [])
     }
     return projectId
   }
@@ -284,11 +291,22 @@ export class WorkspaceImporter {
   async createIssueWithSubissues (
     issue: ImportIssue,
     parentId: Ref<Issue>,
-    projectId: Ref<Project>
+    project: Project,
+    parentsInfo: IssueParentInfo[]
   ): Promise<Ref<Issue>> {
-    const issueId = await this.createIssue(issue, parentId, projectId)
+    console.log('Create issue: ', issue.title)
+    const issueId = await this.createIssue(issue, project, parentId, parentsInfo)
+    console.log('Issue created: ', issueId)
+
+    const parentsInfoEx = [{
+      parentId: issueId,
+      parentTitle: issue.title,
+      space: project._id,
+      identifier: project?.identifier
+    }, ...parentsInfo]
+
     for (const child of issue.subdocs) {
-      await this.createIssueWithSubissues(child as ImportIssue, issueId, projectId)
+      await this.createIssueWithSubissues(child as ImportIssue, issueId, project, parentsInfoEx)
     }
     return issueId
   }
@@ -315,35 +333,39 @@ export class WorkspaceImporter {
       type: projectType ?? generateId() // tracker.ids.ClassicProjectType // todo: fixme! handle project type is not set or created before the import
     }
     await this.client.createDoc(tracker.class.Project, core.space.Space, projectData, projectId)
-    // Add space type's mixin with roles assignments
-    // const CLICKUP_MIXIN_ID = `${CLICKUP_TASK_TYPE_ID}:type:mixin` as Ref<Class<Task>>
+
     const mixinId = `${this.projectTypeByName.get(project.projectType.name)}:type:mixin` as Ref<Mixin<Project>>
     await this.client.createMixin(projectId, tracker.class.Project, core.space.Space, mixinId, {})
+
     return projectId
   }
 
-  async createIssue (issue: ImportIssue, parentId: Ref<Issue>, projectId: Ref<Project>): Promise<Ref<Issue>> {
+  async createIssue (issue: ImportIssue, 
+    project: Project,
+    parentId: Ref<Issue>,
+    parentsInfo: IssueParentInfo[]
+  ): Promise<Ref<Issue>> {
     const issueId = generateId<Issue>()
     const lastOne = await this.client.findOne<Issue>(
       tracker.class.Issue,
-      { space: projectId },
+      { space: project._id },
       { sort: { rank: SortingOrder.Descending } }
     )
     const incResult = await this.client.updateDoc(
       tracker.class.Project,
       core.space.Space,
-      projectId,
+      project._id,
       {
         $inc: { sequence: 1 }
       },
       true
     )
 
-    const proj = await this.client.findOne(tracker.class.Project, { _id: projectId })
+    
     const number = (incResult as any).object.sequence
-    const identifier = `${proj?.identifier}-${number}`
+    const identifier = `${project?.identifier}-${number}`
 
-    const taskKind = proj?.type !== undefined ? { parent: proj.type } : {}
+    const taskKind = project?.type !== undefined ? { parent: project.type } : {}
     const kind = (await this.client.findOne(task.class.TaskType, taskKind)) as TaskType
 
     const collabId = await this.importIssueDescription(issueId, await issue.descrProvider())
@@ -361,12 +383,7 @@ export class WorkspaceImporter {
       comments: issue.comments?.length ?? 0,
       subIssues: 0, // todo
       dueDate: null,
-      parents: [{
-        parentId,
-        parentTitle: '',
-        space: projectId,
-        identifier: ''
-      }], // todo
+      parents: parentsInfo,
       reportedTime: 0,
       remainingTime: issue.remainingTime ?? 0,
       estimation: issue.estimation ?? 0,
@@ -377,8 +394,8 @@ export class WorkspaceImporter {
     }
     await this.client.addCollection(
       tracker.class.Issue,
-      projectId,
-      tracker.ids.NoParent,
+      project._id,
+      parentId,
       tracker.class.Issue,
       'subIssues',
       taskToCreate,
@@ -387,7 +404,7 @@ export class WorkspaceImporter {
 
     if (issue.comments !== undefined) {
       for (const comment of issue.comments) {
-        await this.importComment(issueId, comment, projectId)
+        await this.importComment(issueId, comment, project._id)
       }
     }
     return issueId
