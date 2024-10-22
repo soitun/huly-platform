@@ -6,10 +6,10 @@ import { type FileUploader } from './fileUploader'
 import {
   type Issue,
 } from '@hcengineering/tracker'
-import { readdir } from 'fs/promises'
+import { readdir, readFile } from 'fs/promises'
 import { join, parse } from 'path'
 import csv from 'csvtojson'
-import { ImportComment, ImportIssue, ImportProject, ImportProjectType, WorkspaceImporter } from './importer/importer'
+import { ImportComment, ImportDoc, ImportDocument, ImportIssue, ImportPerson, ImportProject, ImportProjectType, ImportSpace, ImportTeamspace, WorkspaceImporter } from './importer/importer'
 
 interface ClickupTask {
   'Task ID': string
@@ -45,22 +45,65 @@ interface ImportIssueEx extends ImportIssue {
 
 export async function importClickUp (
   client: TxOperations,
-  uploadFile: FileUploader,
-  dir: string
+  fileUploader: FileUploader,
+  dir: string,
+  teamspaceName: string
 ): Promise<void> {
   const files = await readdir(dir, { recursive: true })
   console.log(files)
+
+  const persons: ImportPerson[] = []
+  const projectTypes: ImportProjectType[] = []
+  const projects: ImportProject[] = []
+  const teamspace: ImportTeamspace = {
+    class: 'document.class.TeamSpace',
+    name: teamspaceName,
+    docs: []
+  }
 
   for (const file of files) {
     const parsedFileName = parse(file)
     const extension = parsedFileName.ext.toLowerCase()
     const fullPath = join(dir, file)
-    if (extension === '.md') {
-      console.log ("MD Document: ", fullPath)
+    if (file === 'persons.yaml') {
+      console.log ("Found Persons List: ", fullPath)
+      const personsData = processPersonsFile(fullPath)
+      persons.push(...personsData)
+    } else  if (extension === '.md') {
+      console.log ("Found Wiki Document: ", fullPath)
+      teamspace.docs.push(processClickupWiki(fullPath))
     } else if (extension === '.csv') {
-      console.log ("CSV Tasks: ", fullPath)
-      await processClickupTasks(fullPath, client, uploadFile)
+      console.log ("Found CSV Tasks: ", fullPath)
+      const projectsData = await processClickupTasks(fullPath)
+      projectTypes.push(projectsData.projectType)
+      projects.push(...projectsData.projects)
     }
+  }
+
+  const spaces = teamspace.docs.length > 0
+    ? [...projects, teamspace]
+    : projects
+
+  const importData = {
+    persons,
+    projectTypes,
+    spaces
+  }
+
+  console.log('========================================' )
+  console.log('IMPORT DATA STRUCTURE: ', importData )
+  console.log('========================================' )
+  await new WorkspaceImporter(client, fileUploader, importData).performImport()
+}
+
+function processClickupWiki(fullPath: string): ImportDocument {
+  return {
+    class: 'document.class.Document',
+    title: parse(fullPath).name,
+    descrProvider: async () => {
+      return (await readFile(fullPath)).toString()
+    },
+    subdocs: []
   }
 }
 
@@ -72,11 +115,14 @@ async function processTasksCsv (file: string, process: (json: ClickupTask) => Pr
   }
 }
 
+interface TasksProcessResult {
+  projects: ImportProject[]
+  projectType: ImportProjectType
+}
+
 async function processClickupTasks (
-  file: string,
-  client: TxOperations,
-  uploadFile: (id: string, data: any) => Promise<any>
-): Promise<void> {
+  file: string
+): Promise<TasksProcessResult> {
   const importIssuesByClickupId = new Map<string, ImportIssueEx>()
   const statuses = new Set<string>()
   const projects = new Set<string>()
@@ -128,13 +174,10 @@ async function processClickupTasks (
     }
   }
 
-  const importClickupData = {
-    persons: [],
-    spaces: Array.from(importProjectsByName.values()),
-    projectTypes: [importProjectType]
+  return {
+    projects: Array.from(importProjectsByName.values()),
+    projectType: importProjectType
   }
-
-  await new WorkspaceImporter(client, uploadFile, importClickupData).performImport()
 }
 
 async function convertToImportIssue (clickup: ClickupTask): Promise<ImportIssue> {
@@ -215,4 +258,9 @@ function createClickupProjectType(taskStatuses: string[]): ImportProjectType {
     statuses
   }]
  }
+}
+
+function processPersonsFile(fullPath: string): ImportPerson[] {
+  console.log('Function not implemented.')
+  return []
 }

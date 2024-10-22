@@ -128,7 +128,7 @@ export function importTool (): void {
     .action(async (dir: string, cmd) => {
       const { workspace, user, password, teamspace } = cmd
       await authorize(user, password, workspace, async (client, uploader) => {
-        await importClickUp(client, uploader, dir)
+        await importClickUp(client, uploader, dir, teamspace)
       })
     })
 
