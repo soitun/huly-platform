@@ -1,10 +1,9 @@
-import attachment from '@hcengineering/attachment'
+// import attachment from '@hcengineering/attachment'
 import core, {
   type AttachedData,
   type CollaborativeDoc,
   collaborativeDocParse,
   type Data,
-  Doc,
   generateId,
   makeCollaborativeDoc,
   type Mixin,
@@ -12,9 +11,9 @@ import core, {
   SortingOrder,
   type Timestamp,
   type TxOperations,
-  type Blob as PlatformBlob,
-  DocumentQuery,
-  Status
+  // type Blob as PlatformBlob,
+  type DocumentQuery,
+  type Status
 } from '@hcengineering/core'
 import { type FileUploader } from '../fileUploader'
 import task, {
@@ -28,7 +27,14 @@ import document, { type Document, type Teamspace, getFirstRank } from '@hcengine
 import { jsonToYDocNoSchema, parseMessageMarkdown } from '@hcengineering/text'
 import { yDocToBuffer } from '@hcengineering/collaboration'
 import { type Person } from '@hcengineering/contact'
-import tracker, { type Issue, IssueParentInfo, IssuePriority, type IssueStatus, type Project, TimeReportDayType } from '@hcengineering/tracker'
+import tracker, {
+  type Issue,
+  type IssueParentInfo,
+  IssuePriority,
+  type IssueStatus,
+  type Project,
+  TimeReportDayType
+} from '@hcengineering/tracker'
 import chunter, { type ChatMessage } from '@hcengineering/chunter'
 
 export interface ImportWorkspace {
@@ -129,7 +135,7 @@ export class WorkspaceImporter {
     private readonly workspaceData: ImportWorkspace
   ) {}
 
-  public async performImport () {
+  public async performImport (): Promise<void> {
     if (this.workspaceData.persons !== undefined) {
       for (const person of this.workspaceData.persons) {
         // todo create people
@@ -164,7 +170,7 @@ export class WorkspaceImporter {
           return {
             name: status.name,
             ofAttribute: tracker.attribute.IssueStatus,
-            category: task.statusCategory.UnStarted     //todo: Unsorted?
+            category: task.statusCategory.UnStarted // todo: Unsorted?
           }
         })
         taskTypes.push({
@@ -281,7 +287,7 @@ export class WorkspaceImporter {
 
     const hulyProject = await this.client.findOne(tracker.class.Project, { _id: projectId })
     if (hulyProject === undefined) {
-      throw new Error('Project not found: '+ projectId)
+      throw new Error('Project not found: ' + projectId)
     }
 
     for (const issue of project.docs) {
@@ -300,17 +306,23 @@ export class WorkspaceImporter {
     const issueId = await this.createIssue(issue, project, parentId, parentsInfo)
     console.log('Issue created: ', issueId)
 
-    const parentsInfoEx = [{
-      parentId: issueId,
-      parentTitle: issue.title,
-      space: project._id,
-      identifier: project?.identifier
-    }, ...parentsInfo]
+    if (issue.subdocs.length > 0) {
+      const parentsInfoEx = [
+        {
+          parentId: issueId.id,
+          parentTitle: issue.title,
+          space: project._id,
+          identifier: issueId.identifier
+        },
+        ...parentsInfo
+      ]
 
-    for (const child of issue.subdocs) {
-      await this.createIssueWithSubissues(child as ImportIssue, issueId, project, parentsInfoEx)
+      for (const child of issue.subdocs) {
+        await this.createIssueWithSubissues(child as ImportIssue, issueId.id, project, parentsInfoEx)
+      }
     }
-    return issueId
+
+    return issueId.id
   }
 
   async createProject (project: ImportProject): Promise<Ref<Project>> {
@@ -320,6 +332,7 @@ export class WorkspaceImporter {
       project.defaultIssueStatus !== undefined
         ? this.issueStatusByName.get(project.defaultIssueStatus.name)
         : tracker.status.Backlog
+    const identifier = await this.uniqueProjectIdentifier(project.identifier)
     const projectData = {
       name: project.name,
       description: project.description ?? '',
@@ -328,7 +341,7 @@ export class WorkspaceImporter {
       owners: [], // todo
       archived: false,
       autoJoin: project.autoJoin,
-      identifier: project.identifier,
+      identifier,
       sequence: 0,
       defaultIssueStatus: defaultIssueStatus ?? tracker.status.Backlog, // todo: test with no status
       defaultTimeReportDay: TimeReportDayType.PreviousWorkDay,
@@ -342,11 +355,12 @@ export class WorkspaceImporter {
     return projectId
   }
 
-  async createIssue (issue: ImportIssue, 
+  async createIssue (
+    issue: ImportIssue,
     project: Project,
     parentId: Ref<Issue>,
     parentsInfo: IssueParentInfo[]
-  ): Promise<Ref<Issue>> {
+  ): Promise<{ id: Ref<Issue>, identifier: string }> {
     const issueId = generateId<Issue>()
     const lastOne = await this.client.findOne<Issue>(
       tracker.class.Issue,
@@ -378,7 +392,7 @@ export class WorkspaceImporter {
       assignee: null, // todo: Ref<Person>
       component: null,
       number,
-      status: status,
+      status,
       priority: IssuePriority.NoPriority, // todo
       rank: makeRank(lastOne?.rank, undefined),
       comments: issue.comments?.length ?? 0,
@@ -408,7 +422,7 @@ export class WorkspaceImporter {
         await this.importComment(issueId, comment, project._id)
       }
     }
-    return issueId
+    return { id: issueId, identifier }
   }
 
   async importIssueDescription (id: Ref<Issue>, data: string): Promise<CollaborativeDoc> {
@@ -467,19 +481,19 @@ export class WorkspaceImporter {
 
         await this.fileUploader(attachmentId, form)
 
-        const attachValue = {
-          _id: attachmentId,
-          _class: attachment.class.Attachment,
-          attachedTo: commentId,
-          attachedToClass: chunter.class.ChatMessage,
-          collection: 'attachments',
-          file: '' as Ref<PlatformBlob>,
-          lastModified: Date.now(),
-          name: file.name,
-          size: file.size,
-          space: projectId,
-          type: 'file'
-        }
+        // const attachValue = {
+        //   _id: attachmentId,
+        //   _class: attachment.class.Attachment,
+        //   attachedTo: commentId,
+        //   attachedToClass: chunter.class.ChatMessage,
+        //   collection: 'attachments',
+        //   file: '' as Ref<PlatformBlob>,
+        //   lastModified: Date.now(),
+        //   name: file.name,
+        //   size: file.size,
+        //   space: projectId,
+        //   type: 'file'
+        // }
 
         const data = new FormData()
         data.append('file', new File([blob], attach.title))
@@ -492,18 +506,37 @@ export class WorkspaceImporter {
   // const file = new File([attach.blob], attach.title)
   // writeFileSync(`kitten.jpg`, new Uint8Array(await file.arrayBuffer()))
 
-  async findIssueStatusByName(name: string): Promise<Ref<IssueStatus>> {
-    const query: DocumentQuery<Status> = { 
+  async findIssueStatusByName (name: string): Promise<Ref<IssueStatus>> {
+    const query: DocumentQuery<Status> = {
       name,
       ofAttribute: tracker.attribute.IssueStatus,
       category: task.statusCategory.UnStarted
     }
-    
+
     const status = await this.client.findOne(tracker.class.IssueStatus, query)
     if (status === undefined) {
-      throw new Error("Issue status not found: " + name)
+      throw new Error('Issue status not found: ' + name)
     }
 
     return status._id
+  }
+
+  async uniqueProjectIdentifier (baseIdentifier: string): Promise<string> {
+    const projects = await this.client.findAll(tracker.class.Project, {})
+    const projectsIdentifiers = new Set(projects.map(({ identifier }) => identifier))
+
+    let identifier = baseIdentifier
+    let i = 1
+    while (projectsIdentifiers.has(identifier)) {
+      identifier = `${baseIdentifier}${i}`
+      i++
+    }
+    return identifier
+  }
+
+  async checkProjectIdentifier (identifier: string): Promise<boolean> {
+    const projects = await this.client.findAll(tracker.class.Project, {})
+    const projectsIdentifiers = new Set(projects.map(({ identifier }) => identifier))
+    return !projectsIdentifiers.has(identifier)
   }
 }
