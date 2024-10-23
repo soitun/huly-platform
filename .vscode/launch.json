@@ -25,7 +25,7 @@
       "request": "launch",
       "args": ["src/__start.ts", "import-clickup", "/home/anna/work/clickup/aleksandr/debug", "-u", "user1", "-pw", "1234", "-ws", "ws1", "-ts", "clickup"],
       "env": {
-        "FRONT_URL": "http://localhost:8888",
+        "FRONT_URL": "http://localhost:8087",
       },
       "runtimeVersion": "20",
       "runtimeArgs": ["--nolazy", "-r", "ts-node/register"],
