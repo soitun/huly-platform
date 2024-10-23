@@ -1,4 +1,4 @@
-// import attachment from '@hcengineering/attachment'
+import attachment from '@hcengineering/attachment'
 import core, {
   type AttachedData,
   type CollaborativeDoc,
@@ -11,7 +11,7 @@ import core, {
   SortingOrder,
   type Timestamp,
   type TxOperations,
-  // type Blob as PlatformBlob,
+  type Blob as PlatformBlob,
   type DocumentQuery,
   type Status
 } from '@hcengineering/core'
@@ -479,26 +479,23 @@ export class WorkspaceImporter {
         form.append('id', attachmentId)
         form.append('data', blob) // ?
 
-        await this.fileUploader(attachmentId, form)
-
-        // const attachValue = {
-        //   _id: attachmentId,
-        //   _class: attachment.class.Attachment,
-        //   attachedTo: commentId,
-        //   attachedToClass: chunter.class.ChatMessage,
-        //   collection: 'attachments',
-        //   file: '' as Ref<PlatformBlob>,
-        //   lastModified: Date.now(),
-        //   name: file.name,
-        //   size: file.size,
-        //   space: projectId,
-        //   type: 'file'
-        // }
-
-        const data = new FormData()
-        data.append('file', new File([blob], attach.title))
-
-        // await client.createDoc(document.class.Document, space, attachValue, attachmentId)
+        const res = await this.fileUploader(attachmentId, form)
+        if (res.status === 200) {
+          const attachValue = {
+            _id: attachmentId,
+            _class: attachment.class.Attachment,
+            attachedTo: commentId,
+            attachedToClass: chunter.class.ChatMessage,
+            collection: 'attachments',
+            file: '' as Ref<PlatformBlob>,
+            lastModified: Date.now(),
+            name: file.name,
+            size: file.size,
+            space: projectId,
+            type: 'file'
+          }
+          await this.client.createDoc(document.class.Document, projectId, attachValue, attachmentId)
+        }
       }
     }
   }
