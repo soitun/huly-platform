@@ -1,4 +1,4 @@
-import attachment from '@hcengineering/attachment'
+import attachment, { type Attachment } from '@hcengineering/attachment'
 import core, {
   type AttachedData,
   type CollaborativeDoc,
@@ -13,7 +13,8 @@ import core, {
   type TxOperations,
   type Blob as PlatformBlob,
   type DocumentQuery,
-  type Status
+  type Status,
+  type Account
 } from '@hcengineering/core'
 import { type FileUploader } from '../fileUploader'
 import task, {
@@ -105,16 +106,15 @@ export interface ImportProject extends ImportSpace<ImportIssue> {
 export interface ImportIssue extends ImportDoc {
   class: 'tracker.class.Issue'
   status: ImportStatus
-  assignee?: ImportPerson
+  assignee?: Ref<Person>
   estimation?: number
   remainingTime?: number
   comments?: ImportComment[]
-  collaborators?: ImportPerson[]
 }
 
 export interface ImportComment {
   text: string
-  author: ImportPerson // todo: person vs account
+  author?: ImportPerson | Ref<Account>// todo: person vs account
   date?: Timestamp
   attachments?: ImportAttachment[]
 }
@@ -386,34 +386,33 @@ export class WorkspaceImporter {
     const collabId = await this.importIssueDescription(issueId, await issue.descrProvider())
 
     const status = await this.findIssueStatusByName(issue.status.name)
-    const taskToCreate = {
-      title: issue.title,
-      description: collabId,
-      assignee: null, // todo: Ref<Person>
-      component: null,
-      number,
-      status,
-      priority: IssuePriority.NoPriority, // todo
-      rank: makeRank(lastOne?.rank, undefined),
-      comments: issue.comments?.length ?? 0,
-      subIssues: 0, // todo
-      dueDate: null,
-      parents: parentsInfo,
-      reportedTime: 0,
-      remainingTime: issue.remainingTime ?? 0,
-      estimation: issue.estimation ?? 0,
-      reports: 0,
-      childInfo: [],
-      identifier,
-      kind: kind._id
-    }
     await this.client.addCollection(
       tracker.class.Issue,
       project._id,
       parentId,
       tracker.class.Issue,
       'subIssues',
-      taskToCreate,
+      {
+        title: issue.title,
+        description: collabId,
+        assignee: issue.assignee ?? null,
+        component: null,
+        number,
+        status,
+        priority: IssuePriority.NoPriority, // todo
+        rank: makeRank(lastOne?.rank, undefined),
+        comments: issue.comments?.length ?? 0,
+        subIssues: 0, // todo
+        dueDate: null,
+        parents: parentsInfo,
+        reportedTime: 0,
+        remainingTime: issue.remainingTime ?? 0,
+        estimation: issue.estimation ?? 0,
+        reports: 0,
+        childInfo: [],
+        identifier,
+        kind: kind._id
+      },
       issueId
     )
 
@@ -475,27 +474,62 @@ export class WorkspaceImporter {
         form.append('type', file.type)
         form.append('size', file.size.toString())
         form.append('name', attach.title)
-        const attachmentId = generateId()
+        const attachmentId = generateId<Attachment>()
         form.append('id', attachmentId)
         form.append('data', blob) // ?
 
         const res = await this.fileUploader(attachmentId, form)
         if (res.status === 200) {
-          const attachValue = {
-            _id: attachmentId,
-            _class: attachment.class.Attachment,
-            attachedTo: commentId,
-            attachedToClass: chunter.class.ChatMessage,
-            collection: 'attachments',
-            file: '' as Ref<PlatformBlob>,
-            lastModified: Date.now(),
-            name: file.name,
-            size: file.size,
-            space: projectId,
-            type: 'file'
-          }
-          await this.client.createDoc(document.class.Document, projectId, attachValue, attachmentId)
+          const uuid = await res.text as Ref<PlatformBlob>
+          await this.client.addCollection(
+            attachment.class.Attachment,
+            projectId,
+            commentId,
+            chunter.class.ChatMessage,
+            'attachments',
+            {
+              file: uuid,
+              lastModified: Date.now(),
+              name: file.name,
+              size: file.size,
+              type: file.type
+            },
+            attachmentId
+          )
         }
+
+        /*
+        const ed = {
+          _id: generateId(),
+          _class: attachment.class.Attachment,
+          attachedTo: commentId,
+          attachedToClass: chunter.class.ChatMessage,
+          collection: 'attachments',
+          file: '' as Ref<PlatformBlob>,
+          lastModified: Date.now(),
+          space: projectId,
+          type: 'file'
+        }
+
+        const data = new FormData()
+        const edData = new File([blob], attach.title)
+        data.append('file', edData)
+
+        //             upd(edData, ed)
+        ed.attachedTo = commentId
+        ed.name = edData.name
+        ed.lastModified = edData.lastModified
+        ed.size = edData.size
+        ed.type = edData.type
+
+        const response = await this.fileUploader('', form)
+        if (response.status === 200) {
+          const uuid = (await response.text) as Ref<PlatformBlob>
+          ed.file = uuid
+          ed._id = attachmentId
+        }
+ */
+        // await this.client.createDoc(document.class.Document, projectId, attachValue, attachmentId)
       }
     }
   }
@@ -529,11 +563,5 @@ export class WorkspaceImporter {
       i++
     }
     return identifier
-  }
-
-  async checkProjectIdentifier (identifier: string): Promise<boolean> {
-    const projects = await this.client.findAll(tracker.class.Project, {})
-    const projectsIdentifiers = new Set(projects.map(({ identifier }) => identifier))
-    return !projectsIdentifiers.has(identifier)
   }
 }

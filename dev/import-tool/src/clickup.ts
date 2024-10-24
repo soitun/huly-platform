@@ -1,5 +1,5 @@
-import { type Timestamp, type TxOperations } from '@hcengineering/core'
-import { type FileUploader } from './fileUploader'
+import { type Ref, type Timestamp, type TxOperations } from '@hcengineering/core'
+import { download, type FileUploader } from './fileUploader'
 import { readdir, readFile } from 'fs/promises'
 import { join, parse } from 'path'
 import csv from 'csvtojson'
@@ -13,6 +13,7 @@ import {
   type ImportTeamspace,
   WorkspaceImporter
 } from './importer/importer'
+import contact, { type Person, type PersonAccount } from '@hcengineering/contact'
 
 interface ClickupTask {
   'Task ID': string
@@ -36,11 +37,16 @@ interface ClickupComment {
   text: string
 }
 
+interface ClickupAttachment {
+  title: string
+  url: string
+}
 interface ImportIssueEx extends ImportIssue {
   clickupParentId?: string
   clickupProjectName?: string
 }
 
+// todo: make it class
 export async function importClickUp (
   client: TxOperations,
   fileUploader: FileUploader,
@@ -120,29 +126,76 @@ interface TasksProcessResult {
 }
 
 async function processClickupTasks (client: TxOperations, file: string): Promise<TasksProcessResult> {
-  const importIssuesByClickupId = new Map<string, ImportIssueEx>()
+  const persons = new Set<string>()
+  const emails = new Set<string>()
+  await processTasksCsv(file, async (clickupTask) => {
+    clickupTask.Assignees.substring(1, clickupTask.Assignees.length - 1).split(',')
+      .filter((name) => name.length > 0)
+      .forEach((name) => persons.add(name))
+
+    JSON.parse(clickupTask.Comments)
+      .forEach((comment: ClickupComment) => {
+        if (comment.by === undefined) {
+          console.log(clickupTask)
+          console.log(comment)
+
+          emails.add(comment.by)
+        }
+      })
+  })
+
+  const personsByName = await findPersonsByNames(client, persons)
+  console.log('persons: ', persons)
+  console.log('personsByName: ', personsByName)
+  const notFound = Array.from(persons).filter(name => !personsByName.has(name))
+  if (notFound.length > 0) {
+    throw new Error('Persons not found: ' + JSON.stringify(notFound))
+  }
+
+  const accountsByEmail = await findAccountsByEmails(client, Array.from(emails))
+  console.log('emails: ', emails)
+  console.log('accountsByEmail: ', accountsByEmail)
+  const accNotFound = Array.from(emails).filter(email => !accountsByEmail.has(email))
+  if (notFound.length > 0) {
+    throw new Error('Accounts not found: ' + JSON.stringify(accNotFound))
+  }
+
   const statuses = new Set<string>()
   const projects = new Set<string>()
-
+  const importIssuesByClickupId = new Map<string, ImportIssueEx>()
   await processTasksCsv(file, async (clickupTask) => {
-    const importIssue = (await convertToImportIssue(clickupTask)) as ImportIssueEx
+    const importIssue = (await convertToImportIssue(clickupTask, personsByName, accountsByEmail)) as ImportIssueEx
     importIssue.clickupParentId = clickupTask['Parent ID']
     importIssue.clickupProjectName = clickupTask['Space Name']
     importIssuesByClickupId.set(clickupTask['Task ID'], importIssue)
 
     statuses.add(clickupTask.Status)
     projects.add(clickupTask['Space Name'])
+
+    clickupTask.Assignees.substring(1, clickupTask.Assignees.length - 1).split(',')
+      .filter((name) => name.length > 0)
+      .forEach((name) => persons.add(name))
+
+    JSON.parse(clickupTask.Comments)
+      .forEach((comment: ClickupComment) => {
+        if (comment.by === undefined) {
+          console.log(clickupTask)
+          console.log(comment)
+
+          emails.add(comment.by)
+        }
+      })
   })
 
   console.log(projects)
   console.log(statuses)
-  console.log(importIssuesByClickupId)
+  // console.log(importIssuesByClickupId)
 
   const importProjectType = createClickupProjectType(Array.from(statuses))
 
   const importProjectsByName = new Map<string, ImportProject>()
   for (const projectName of projects) {
-    const identifier = await getProjectIdentifier(projectName)
+    const identifier = getProjectIdentifier(projectName)
     importProjectsByName.set(projectName, {
       class: 'tracker.class.Project',
       name: projectName,
@@ -179,7 +232,11 @@ async function processClickupTasks (client: TxOperations, file: string): Promise
   }
 }
 
-async function convertToImportIssue (clickup: ClickupTask): Promise<ImportIssue> {
+async function convertToImportIssue (
+  clickup: ClickupTask,
+  personsByName: Map<string, Ref<Person>>,
+  accountsByEmail: Map<string, Ref<PersonAccount>>
+): Promise<ImportIssue> {
   const status = {
     name: clickup.Status
   }
@@ -190,10 +247,19 @@ async function convertToImportIssue (clickup: ClickupTask): Promise<ImportIssue>
   const estimation = clickup['Time Estimated']
   const remainingTime = estimation - clickup['Time Spent']
 
-  const comments = convertToImportComments(clickup.Comments)
-  // const attachments = await convertAttachmentsToComment(clickup.Attachments)
+  const comments = convertToImportComments(clickup.Comments, accountsByEmail)
+  const attachments = await convertAttachmentsToComment(clickup.Attachments)
 
   const description = `${content}\n\n---\n${checklists}` // todo: test all the combinations
+
+  let assignee
+  if (clickup.Assignees !== undefined) {
+    const assignees = clickup.Assignees.substring(1, clickup.Assignees.length - 1).split(',')
+    if (assignees.length > 0) {
+      assignee = personsByName.get(assignees[0])
+    }
+  }
+
   return {
     class: 'tracker.class.Issue',
     title: '[' + clickup['Task ID'] + '] ' + clickup['Task Name'],
@@ -203,18 +269,36 @@ async function convertToImportIssue (clickup: ClickupTask): Promise<ImportIssue>
     status,
     estimation,
     remainingTime,
-    comments,
-    subdocs: []
+    comments: comments.concat(attachments),
+    subdocs: [],
+    assignee
   }
 }
 
-function convertToImportComments (clickup: string): ImportComment[] {
+function convertToImportComments (clickup: string, accountsByEmail: Map<string, Ref<PersonAccount>>): ImportComment[] {
   return JSON.parse(clickup).map((comment: ClickupComment) => {
     return {
       text: comment.text,
-      date: new Date(comment.date).getTime()
+      date: new Date(comment.date).getTime(),
+      author: accountsByEmail.get(comment.by)
     }
   })
+}
+
+async function convertAttachmentsToComment (clickup: string): Promise<ImportComment[]> {
+  const res: ImportComment[] = []
+  const attachments: ClickupAttachment[] = JSON.parse(clickup)
+  for (const attachment of attachments) {
+    res.push({
+      // text: `</br> Attachment: <a href='${attachment.url}'>${attachment.title}</a>`,
+      text: `(${attachment.url})[${attachment.title}]`,
+      attachments: [{
+        title: attachment.title,
+        blobProvider: async () => { return await download(attachment.url) } // todo: handle error (broken link, or no vpn)
+      }]
+    })
+  }
+  return res
 }
 
 function convertChecklistsToMarkdown (clickup: string): string {
@@ -230,11 +314,34 @@ function convertChecklistsToMarkdown (clickup: string): string {
   return huly
 }
 
+async function findPersonsByNames (client: TxOperations, names: Set<string>): Promise<Map<string, Ref<Person>>> {
+  return (await client.findAll(contact.class.Person, {}))
+    .map((person) => {
+      return {
+        _id: person._id,
+        name: person.name.split(',').reverse().join(' ')
+      }
+    })
+    .filter(person => names.has(person.name))
+    .reduce((refByName, person) => {
+      refByName.set(person.name, person._id)
+      return refByName
+    }, new Map())
+}
+
+async function findAccountsByEmails (client: TxOperations, emails: string[]): Promise<Map<string, Ref<PersonAccount>>> {
+  const accounts = await client.findAll(contact.class.PersonAccount, { email: { $in: emails } })
+  return accounts.reduce((accountsByEmail, account) => {
+    accountsByEmail.set(account.email, account._id)
+    return accountsByEmail
+  }, new Map())
+}
+
 function fixMultilineString (content: string): string {
   return content.split('\\n').join('\n')
 }
 
-async function getProjectIdentifier (projectName: string): Promise<string> {
+function getProjectIdentifier (projectName: string): string {
   return projectName.toUpperCase().replaceAll('-', '_').replaceAll(' ', '_').substring(0, 4)
 }
 
@@ -245,8 +352,8 @@ function createClickupProjectType (taskStatuses: string[]): ImportProjectType {
     }
   })
   return {
-    name: 'ClickUp project!!!',
-    description: 'For issues imported from ClickUp!!!',
+    name: 'ClickUp project',
+    description: 'For issues imported from ClickUp',
     taskTypes: [
       {
         name: 'ClickUp issue',
