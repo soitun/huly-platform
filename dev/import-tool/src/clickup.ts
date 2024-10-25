@@ -135,7 +135,7 @@ async function processClickupTasks (client: TxOperations, file: string): Promise
 
     JSON.parse(clickupTask.Comments)
       .forEach((comment: ClickupComment) => {
-        if (comment.by === undefined) {
+        if (comment.by !== undefined) {
           console.log(clickupTask)
           console.log(comment)
 
@@ -147,18 +147,18 @@ async function processClickupTasks (client: TxOperations, file: string): Promise
   const personsByName = await findPersonsByNames(client, persons)
   console.log('persons: ', persons)
   console.log('personsByName: ', personsByName)
-  const notFound = Array.from(persons).filter(name => !personsByName.has(name))
-  if (notFound.length > 0) {
-    throw new Error('Persons not found: ' + JSON.stringify(notFound))
-  }
+  // const notFound = Array.from(persons).filter(name => !personsByName.has(name))
+  // if (notFound.length > 0) {
+  //   throw new Error('Persons not found: ' + JSON.stringify(notFound))
+  // }
 
   const accountsByEmail = await findAccountsByEmails(client, Array.from(emails))
   console.log('emails: ', emails)
   console.log('accountsByEmail: ', accountsByEmail)
-  const accNotFound = Array.from(emails).filter(email => !accountsByEmail.has(email))
-  if (notFound.length > 0) {
-    throw new Error('Accounts not found: ' + JSON.stringify(accNotFound))
-  }
+  // const accNotFound = Array.from(emails).filter(email => !accountsByEmail.has(email))
+  // if (accNotFound.length > 0) {
+  //   throw new Error('Accounts not found: ' + JSON.stringify(accNotFound))
+  // }
 
   const statuses = new Set<string>()
   const projects = new Set<string>()
@@ -262,7 +262,7 @@ async function convertToImportIssue (
 
   return {
     class: 'tracker.class.Issue',
-    title: '[' + clickup['Task ID'] + '] ' + clickup['Task Name'],
+    title: clickup['Task Name'],
     descrProvider: () => {
       return Promise.resolve(description)
     },
@@ -285,6 +285,7 @@ function convertToImportComments (clickup: string, accountsByEmail: Map<string, 
   })
 }
 
+// todo: add attachments to description
 async function convertAttachmentsToComment (clickup: string): Promise<ImportComment[]> {
   const res: ImportComment[] = []
   const attachments: ClickupAttachment[] = JSON.parse(clickup)

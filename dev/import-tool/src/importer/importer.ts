@@ -11,7 +11,6 @@ import core, {
   SortingOrder,
   type Timestamp,
   type TxOperations,
-  type Blob as PlatformBlob,
   type DocumentQuery,
   type Status,
   type Account
@@ -114,7 +113,7 @@ export interface ImportIssue extends ImportDoc {
 
 export interface ImportComment {
   text: string
-  author?: ImportPerson | Ref<Account>// todo: person vs account
+  author?: Ref<Account>// todo: person vs account
   date?: Timestamp
   attachments?: ImportAttachment[]
 }
@@ -170,7 +169,7 @@ export class WorkspaceImporter {
           return {
             name: status.name,
             ofAttribute: tracker.attribute.IssueStatus,
-            category: task.statusCategory.UnStarted // todo: Unsorted?
+            category: task.statusCategory.Active // todo: Unsorted?
           }
         })
         taskTypes.push({
@@ -179,7 +178,7 @@ export class WorkspaceImporter {
           kind: 'both',
           name: taskType.name,
           ofClass: tracker.class.Issue,
-          statusCategories: [task.statusCategory.UnStarted],
+          statusCategories: [task.statusCategory.Active],
           statusClass: tracker.class.IssueStatus,
           icon: tracker.icon.Issue,
           color: 0,
@@ -460,15 +459,15 @@ export class WorkspaceImporter {
       'comments',
       value,
       commentId,
-      // new Date(data.created_at).getTime(),
-      comment.date
-      // this.personsByName.comment.author // todo: as Ref<Account>
+      comment.date,
+      comment.author // todo: as Ref<Account>
     )
 
     if (comment.attachments !== undefined) {
       for (const attach of comment.attachments) {
         const blob = await attach.blobProvider()
         const file = new File([blob], attach.title)
+
         const form = new FormData()
         form.append('file', file)
         form.append('type', file.type)
@@ -480,7 +479,13 @@ export class WorkspaceImporter {
 
         const res = await this.fileUploader(attachmentId, form)
         if (res.status === 200) {
-          const uuid = await res.text as Ref<PlatformBlob>
+          const uuid = await res.text()
+          // as [
+          //   {
+          //     key: 'file',
+          //     id: uuid
+          //   }
+          // ]
           await this.client.addCollection(
             attachment.class.Attachment,
             projectId,
@@ -488,7 +493,7 @@ export class WorkspaceImporter {
             chunter.class.ChatMessage,
             'attachments',
             {
-              file: uuid,
+              file: JSON.parse(uuid)[0].id,
               lastModified: Date.now(),
               name: file.name,
               size: file.size,
@@ -497,51 +502,15 @@ export class WorkspaceImporter {
             attachmentId
           )
         }
-
-        /*
-        const ed = {
-          _id: generateId(),
-          _class: attachment.class.Attachment,
-          attachedTo: commentId,
-          attachedToClass: chunter.class.ChatMessage,
-          collection: 'attachments',
-          file: '' as Ref<PlatformBlob>,
-          lastModified: Date.now(),
-          space: projectId,
-          type: 'file'
-        }
-
-        const data = new FormData()
-        const edData = new File([blob], attach.title)
-        data.append('file', edData)
-
-        //             upd(edData, ed)
-        ed.attachedTo = commentId
-        ed.name = edData.name
-        ed.lastModified = edData.lastModified
-        ed.size = edData.size
-        ed.type = edData.type
-
-        const response = await this.fileUploader('', form)
-        if (response.status === 200) {
-          const uuid = (await response.text) as Ref<PlatformBlob>
-          ed.file = uuid
-          ed._id = attachmentId
-        }
- */
-        // await this.client.createDoc(document.class.Document, projectId, attachValue, attachmentId)
       }
     }
   }
-
-  // const file = new File([attach.blob], attach.title)
-  // writeFileSync(`kitten.jpg`, new Uint8Array(await file.arrayBuffer()))
 
   async findIssueStatusByName (name: string): Promise<Ref<IssueStatus>> {
     const query: DocumentQuery<Status> = {
       name,
       ofAttribute: tracker.attribute.IssueStatus,
-      category: task.statusCategory.UnStarted
+      category: task.statusCategory.Active
     }
 
     const status = await this.client.findOne(tracker.class.IssueStatus, query)
