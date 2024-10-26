@@ -277,10 +277,11 @@ async function convertToImportIssue (
 
 function convertToImportComments (clickup: string, accountsByEmail: Map<string, Ref<PersonAccount>>): ImportComment[] {
   return JSON.parse(clickup).map((comment: ClickupComment) => {
+    const author = accountsByEmail.get(comment.by)
     return {
-      text: comment.text,
+      text: author !== undefined ? comment.text : `${comment.text}\n\ncomment by ${comment.by}`,
       date: new Date(comment.date).getTime(),
-      author: accountsByEmail.get(comment.by)
+      author
     }
   })
 }
