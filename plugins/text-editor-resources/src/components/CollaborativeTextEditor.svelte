@@ -128,6 +128,7 @@
   void remoteProvider.loaded.then(() => (remoteSynced = true))
 
   let editor: Editor
+  let content: any
   let element: HTMLElement
   let textToolbarElement: HTMLElement
   let imageToolbarElement: HTMLElement
@@ -438,6 +439,8 @@
 
         throttle.call(updateLastUpdateTime)
         dispatch('update')
+
+        content = editor.getJSON()
       },
       onContentError: ({ error, disableCollaboration }) => {
         disableCollaboration()
@@ -459,6 +462,8 @@
     void localProvider.destroy()
   })
 </script>
+
+{JSON.stringify(content, null, 2)}
 
 <input
   bind:this={inputImage}
