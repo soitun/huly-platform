@@ -24,7 +24,7 @@ import task, {
   type TaskType
 } from '@hcengineering/task'
 import document, { type Document, type Teamspace, getFirstRank } from '@hcengineering/document'
-import { jsonToYDocNoSchema, parseMessageMarkdown } from '@hcengineering/text'
+import { jsonToYDocNoSchema, parseMessageMarkdown, type MarkupNode } from '@hcengineering/text'
 import { yDocToBuffer } from '@hcengineering/collaboration'
 import { type Person } from '@hcengineering/contact'
 import tracker, {
@@ -123,6 +123,10 @@ export interface ImportAttachment {
   blobProvider: () => Promise<Blob>
 }
 
+export interface MarkdownPostprocessor {
+  process: (json: MarkupNode) => MarkupNode
+}
+
 export class WorkspaceImporter {
   private readonly personsByName = new Map<string, Ref<Person>>()
   private readonly issueStatusByName = new Map<string, Ref<IssueStatus>>()
@@ -131,7 +135,8 @@ export class WorkspaceImporter {
   constructor (
     private readonly client: TxOperations,
     private readonly fileUploader: FileUploader,
-    private readonly workspaceData: ImportWorkspace
+    private readonly workspaceData: ImportWorkspace,
+    private readonly postprocessor: MarkdownPostprocessor
   ) {}
 
   public async performImport (): Promise<void> {
@@ -423,11 +428,15 @@ export class WorkspaceImporter {
     return { id: issueId, identifier }
   }
 
-  async importIssueDescription (id: Ref<Issue>, data: string): Promise<CollaborativeDoc> {
+  async importIssueDescription (
+    id: Ref<Issue>,
+    data: string
+  ): Promise<CollaborativeDoc> {
     const json = parseMessageMarkdown(data ?? '', 'image://')
+    const processedJson = this.postprocessor.process(json)
     const collabId = makeCollaborativeDoc(id, 'description')
 
-    const yDoc = jsonToYDocNoSchema(json, 'description')
+    const yDoc = jsonToYDocNoSchema(processedJson, 'description')
     const { documentId } = collaborativeDocParse(collabId)
     const buffer = yDocToBuffer(yDoc)
 

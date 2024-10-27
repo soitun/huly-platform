@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-import { concatLink, type Ref, TxOperations } from '@hcengineering/core'
+import { concatLink, TxOperations } from '@hcengineering/core'
 import serverClientPlugin, {
   createClient,
   getUserWorkspaces,
@@ -23,8 +23,7 @@ import { program } from 'commander'
 import { importNotion } from './notion'
 import { setMetadata } from '@hcengineering/platform'
 import { getFileUploader, type FileUploader } from './fileUploader'
-import { type Teamspace } from '@hcengineering/document'
-import { importClickUp } from './clickup'
+import { ClickupImporter } from './clickup'
 
 /**
  * @public
@@ -128,7 +127,8 @@ export function importTool (): void {
     .action(async (dir: string, cmd) => {
       const { workspace, user, password, teamspace } = cmd
       await authorize(user, password, workspace, async (client, uploader) => {
-        await importClickUp(client, uploader, dir, teamspace)
+        const importer = new ClickupImporter(client, uploader)
+        await importer.importClickUp(dir, teamspace)
       })
     })
 
