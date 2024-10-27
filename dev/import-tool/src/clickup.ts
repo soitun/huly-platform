@@ -54,20 +54,31 @@ class ClickupMarkdownPostprocessor implements MarkdownPostprocessor {
 
   process (json: MarkupNode): MarkupNode {
     traverseNode(json, (node) => {
+      // Обрабатываем только текстовые узлы
       if (node.type === MarkupNodeType.text && node.text !== undefined) {
         const mentionRegex = /@([A-Za-z]+ [A-Za-z]+)/g
         let match
         let lastIndex = 0
         const content: MarkupNode[] = []
+        let hasMentions = false
 
+        // Ищем все упоминания в тексте
         while ((match = mentionRegex.exec(node.text)) !== null) {
+          hasMentions = true
+          // Если есть текст перед упоминанием, добавляем его как текстовый узел
           if (match.index > lastIndex) {
-            content.push({ type: MarkupNodeType.text, text: node.text.slice(lastIndex, match.index) })
+            content.push({
+              type: MarkupNodeType.text,
+              text: node.text.slice(lastIndex, match.index),
+              marks: node.marks,
+              attrs: node.attrs
+            })
           }
 
           const name = match[1]
           const personRef = this.personsByName.get(name)
           if (personRef !== undefined) {
+            // Если нашли соответствующего человека, создаем узел-ссылку
             content.push({
               type: MarkupNodeType.reference,
               attrs: {
@@ -77,24 +88,47 @@ class ClickupMarkdownPostprocessor implements MarkdownPostprocessor {
               }
             })
           } else {
-            content.push({ type: MarkupNodeType.text, text: match[0] })
+            // Если человек не найден, оставляем текст как есть
+            content.push({
+              type: MarkupNodeType.text,
+              text: match[0],
+              marks: node.marks,
+              attrs: node.attrs
+            })
           }
 
           lastIndex = mentionRegex.lastIndex
         }
 
-        if (lastIndex < node.text.length) {
-          content.push({ type: MarkupNodeType.text, text: node.text.slice(lastIndex) })
-        }
+        // Модифицируем узел только если были найдены упоминания
+        if (hasMentions) {
+          // Добавляем оставшийся текст после последнего упоминания
+          if (lastIndex < node.text.length) {
+            content.push({
+              type: MarkupNodeType.text,
+              text: node.text.slice(lastIndex),
+              marks: node.marks,
+              attrs: node.attrs
+            })
+          }
 
-        if (content.length > 0) {
-          Object.assign(node, { type: MarkupNodeType.paragraph, content })
-          return false // Прекратить обход дочерних элементов этого узла
+          // Если были найдены упоминания, модифицируем текущий узел
+          if (content.length > 0) {
+          // Заменяем содержимое текущего узла на новый массив узлов
+            node.type = MarkupNodeType.paragraph
+            node.content = content
+            // Удаляем исходный текст, так как он теперь разбит на отдельные узлы
+            delete node.text
+            // Прекращаем обход дочерних элементов этого узла, так как мы его уже обработали
+            return false
+          }
         }
+        // Продолжаем обход для других типов узлов
+        return true
       }
-      return true // Продолжить обход
     })
 
+    // Возвращаем модифицированное дерево разметки
     return json
   }
 }
