@@ -223,7 +223,7 @@ class ClickupImporter {
         })
     })
 
-    await this.fillPersonsByNames(persons)
+    await this.fillPersonsByNames()
     console.log('persons: ', persons)
     console.log('personsByName: ', this.personsByName)
     // const notFound = Array.from(persons).filter(name => !this.personsByName.has(name))
@@ -331,10 +331,20 @@ class ClickupImporter {
     const description = `${content.trim()}${separator}${checklists.trim()}`
 
     let assignee
+    const serviceComments: ImportComment[] = []
     if (clickup.Assignees !== undefined) {
-      const assignees = clickup.Assignees.substring(1, clickup.Assignees.length - 1).split(',')
-      if (assignees.length > 0) {
-        assignee = this.personsByName.get(assignees[0])
+      const assignees = clickup.Assignees
+        .substring(1, clickup.Assignees.length - 1)
+        .split(',')
+        .map((name) => name.trim())
+        .filter((name) => name.length > 0)
+
+      for (let i = 0; i < assignees.length && assignee === undefined; i++) {
+        assignee = this.personsByName.get(assignees[i])
+      }
+
+      if (assignee === undefined && assignees.length > 0) {
+        serviceComments.push(this.createAssigneesComment(assignees))
       }
     }
 
@@ -348,13 +358,19 @@ class ClickupImporter {
       status,
       estimation,
       remainingTime,
-      comments: comments.concat(attachments),
+      comments: comments.concat(attachments).concat(serviceComments),
       subdocs: [],
       assignee,
       customAttributes: new Map([
         ['clickupId', clickup['Task ID']],
         ['clickupAssignee', clickup.Assignees]
       ])
+    }
+  }
+
+  createAssigneesComment (assignees: string[]): ImportComment {
+    return {
+      text: `*ClickUp assignees: ${assignees.join(', ')}*`
     }
   }
 
@@ -397,7 +413,7 @@ class ClickupImporter {
     return huly
   }
 
-  private async fillPersonsByNames (names: Set<string>): Promise<void> {
+  private async fillPersonsByNames (): Promise<void> {
     this.personsByName = (await this.client.findAll(contact.class.Person, {}))
       .map((person) => {
         return {
@@ -405,7 +421,6 @@ class ClickupImporter {
           name: person.name.split(',').reverse().join(' ')
         }
       })
-      .filter(person => names.has(person.name))
       .reduce((refByName, person) => {
         refByName.set(person.name, person._id)
         return refByName
