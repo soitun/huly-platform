@@ -205,42 +205,11 @@ class ClickupImporter {
   }
 
   private async processClickupTasks (file: string): Promise<TasksProcessResult> {
-    const persons = new Set<string>()
-    const emails = new Set<string>()
-    await this.processTasksCsv(file, async (clickupTask) => {
-      clickupTask.Assignees.substring(1, clickupTask.Assignees.length - 1).split(',')
-        .filter((name) => name.length > 0)
-        .forEach((name) => persons.add(name))
-
-      JSON.parse(clickupTask.Comments)
-        .forEach((comment: ClickupComment) => {
-          if (comment.by !== undefined) {
-            console.log(clickupTask)
-            console.log(comment)
-
-            emails.add(comment.by)
-          }
-        })
-    })
-
     await this.fillPersonsByNames()
-    console.log('persons: ', persons)
-    console.log('personsByName: ', this.personsByName)
-    // const notFound = Array.from(persons).filter(name => !this.personsByName.has(name))
-    // if (notFound.length > 0) {
-    //   throw new Error('Persons not found: ' + JSON.stringify(notFound))
-    // }
+    await this.fillAccountsByEmails()
 
-    await this.fillAccountsByEmails(Array.from(emails))
-    console.log('emails: ', emails)
-    console.log('accountsByEmail: ', this.accountsByEmail)
-    // const accNotFound = Array.from(emails).filter(email => !this.accountsByEmail.has(email))
-    // if (accNotFound.length > 0) {
-    //   throw new Error('Accounts not found: ' + JSON.stringify(accNotFound))
-    // }
-
-    const statuses = new Set<string>()
     const projects = new Set<string>()
+    const statuses = new Set<string>()
     const importIssuesByClickupId = new Map<string, ImportIssueEx>()
     await this.processTasksCsv(file, async (clickupTask) => {
       const importIssue = (await this.convertToImportIssue(clickupTask)) as ImportIssueEx
@@ -248,27 +217,12 @@ class ClickupImporter {
       importIssue.clickupProjectName = clickupTask['Space Name']
       importIssuesByClickupId.set(clickupTask['Task ID'], importIssue)
 
-      statuses.add(clickupTask.Status)
       projects.add(clickupTask['Space Name'])
-
-      clickupTask.Assignees.substring(1, clickupTask.Assignees.length - 1).split(',')
-        .filter((name) => name.length > 0)
-        .forEach((name) => persons.add(name))
-
-      JSON.parse(clickupTask.Comments)
-        .forEach((comment: ClickupComment) => {
-          if (comment.by === undefined) {
-            console.log(clickupTask)
-            console.log(comment)
-
-            emails.add(comment.by)
-          }
-        })
+      statuses.add(clickupTask.Status)
     })
 
     console.log(projects)
     console.log(statuses)
-    // console.log(importIssuesByClickupId)
 
     const importProjectType = this.createClickupProjectType(Array.from(statuses))
 
@@ -422,8 +376,8 @@ class ClickupImporter {
       }, new Map())
   }
 
-  private async fillAccountsByEmails (emails: string[]): Promise<void> {
-    const accounts = await this.client.findAll(contact.class.PersonAccount, { email: { $in: emails } })
+  private async fillAccountsByEmails (): Promise<void> {
+    const accounts = await this.client.findAll(contact.class.PersonAccount, {})
     this.accountsByEmail = accounts.reduce((accountsByEmail, account) => {
       accountsByEmail.set(account.email, account._id)
       return accountsByEmail
