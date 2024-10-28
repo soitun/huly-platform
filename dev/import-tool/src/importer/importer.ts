@@ -13,8 +13,10 @@ import core, {
   type TxOperations,
   type DocumentQuery,
   type Status,
-  type Account
+  type Account,
+  ClassifierKind
 } from '@hcengineering/core'
+import { type IntlString } from '@hcengineering/platform'
 import { type FileUploader } from './uploader'
 import task, {
   createProjectType,
@@ -174,15 +176,51 @@ export class WorkspaceImporter {
           return {
             name: status.name,
             ofAttribute: tracker.attribute.IssueStatus,
-            category: task.statusCategory.Active // todo: Unsorted?
+            category: task.statusCategory.Active
           }
         })
+
+        // Create target class for custom attributes
+        const targetClassId = await this.client.createDoc(core.class.Class, core.space.Model, {
+          extends: tracker.class.Issue,
+          kind: ClassifierKind.MIXIN,
+          label: taskType.name as IntlString
+        })
+
+        // Add custom attributes to the target class
+        await this.client.createDoc(core.class.Attribute, core.space.Model, {
+          name: 'clickupId',
+          label: 'ClickUp ID',
+          type: {
+            _class: core.class.TypeString,
+            label: core.string.String
+          },
+          attributeOf: targetClassId,
+          isCustom: true,
+          space: core.space.Model,
+          index: 1
+        })
+
+        await this.client.createDoc(core.class.Attribute, core.space.Model, {
+          name: 'clickupAssignee',
+          label: 'ClickUp Assignees',
+          type: {
+            _class: core.class.TypeString,
+            label: core.string.String
+          },
+          attributeOf: targetClassId,
+          isCustom: true,
+          space: core.space.Model,
+          index: 2
+        })
+
         taskTypes.push({
           _id: taskTypeId,
           descriptor: tracker.descriptors.Issue,
           kind: 'both',
           name: taskType.name,
           ofClass: tracker.class.Issue,
+          targetClass: targetClassId, // Use the new target class with custom attributes
           statusCategories: [task.statusCategory.Active],
           statusClass: tracker.class.IssueStatus,
           icon: tracker.icon.Issue,
