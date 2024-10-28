@@ -59,12 +59,18 @@ export interface ImportProjectType {
 export interface ImportTaskType {
   name: string
   statuses: ImportStatus[]
+  attributes?: ImportAttribute[]
   description?: string
 }
 
 export interface ImportStatus {
   name: string
   description?: string
+}
+
+export interface ImportAttribute {
+  name: string
+  label: string
 }
 
 export interface ImportSpace<T extends ImportDoc> {
@@ -106,11 +112,13 @@ export interface ImportProject extends ImportSpace<ImportIssue> {
 
 export interface ImportIssue extends ImportDoc {
   class: 'tracker.class.Issue'
+  taskType: string
   status: ImportStatus
   assignee?: Ref<Person>
   estimation?: number
   remainingTime?: number
   comments?: ImportComment[]
+  customAttributes?: Map<string, string>
 }
 
 export interface ImportComment {
@@ -133,6 +141,7 @@ export class WorkspaceImporter {
   private readonly personsByName = new Map<string, Ref<Person>>()
   private readonly issueStatusByName = new Map<string, Ref<IssueStatus>>()
   private readonly projectTypeByName = new Map<string, Ref<ProjectType>>()
+  private readonly taskTypeByName = new Map<string, Ref<TaskType>>()
 
   constructor (
     private readonly client: TxOperations,
@@ -187,32 +196,23 @@ export class WorkspaceImporter {
           label: taskType.name as IntlString
         })
 
-        // Add custom attributes to the target class
-        await this.client.createDoc(core.class.Attribute, core.space.Model, {
-          name: 'clickupId',
-          label: 'ClickUp ID',
-          type: {
-            _class: core.class.TypeString,
-            label: core.string.String
-          },
-          attributeOf: targetClassId,
-          isCustom: true,
-          space: core.space.Model,
-          index: 1
-        })
-
-        await this.client.createDoc(core.class.Attribute, core.space.Model, {
-          name: 'clickupAssignee',
-          label: 'ClickUp Assignees',
-          type: {
-            _class: core.class.TypeString,
-            label: core.string.String
-          },
-          attributeOf: targetClassId,
-          isCustom: true,
-          space: core.space.Model,
-          index: 2
-        })
+        if (taskType.attributes !== undefined) {
+          // Add custom attributes to the target class
+          for (const attribute of taskType.attributes) {
+            await this.client.createDoc(core.class.Attribute, core.space.Model, {
+              name: attribute.name,
+              label: attribute.label,
+              type: {
+                _class: core.class.TypeString,
+                label: core.string.String
+              },
+              attributeOf: targetClassId,
+              isCustom: true,
+              space: core.space.Model,
+              index: 1
+            })
+          }
+        }
 
         taskTypes.push({
           _id: taskTypeId,
@@ -228,13 +228,15 @@ export class WorkspaceImporter {
           allowedAsChildOf: [taskTypeId],
           factory: statuses
         })
+
+        this.taskTypeByName.set(taskType.name, taskTypeId)
       }
     }
     const projectData = {
       name: projectType.name,
       descriptor: tracker.descriptors.ProjectType,
       shortDescription: projectType.description,
-      description: '', // put the description as shortDescription, so the users can see it
+      description: '', // Put the description as shortDescription, so the users can see it
       tasks: [],
       roles: 0,
       classic: true
