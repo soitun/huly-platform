@@ -11,7 +11,7 @@ import {
   type ImportProject,
   type ImportProjectType,
   type ImportTeamspace,
-  type MarkdownPostprocessor,
+  type MarkdownPreprocessor,
   WorkspaceImporter
 } from './importer/importer'
 import contact, { type Person, type PersonAccount } from '@hcengineering/contact'
@@ -49,7 +49,8 @@ interface ImportIssueEx extends ImportIssue {
   clickupProjectName?: string
 }
 
-class ClickupMarkdownPostprocessor implements MarkdownPostprocessor {
+class ClickupMarkdownPreprocessor implements MarkdownPreprocessor {
+  private readonly MENTION_REGEX = /@([A-Za-z]+ [A-Za-z]+)/g
   constructor (private readonly personsByName: Map<string, Ref<Person>>) {}
 
   process (json: MarkupNode): MarkupNode {
@@ -58,12 +59,11 @@ class ClickupMarkdownPostprocessor implements MarkdownPostprocessor {
         const newContent: MarkupNode[] = []
         for (const childNode of node.content) {
           if (childNode.type === MarkupNodeType.text && childNode.text !== undefined) {
-            const mentionRegex = /@([A-Za-z]+ [A-Za-z]+)/g
             let match
             let lastIndex = 0
             let hasMentions = false
 
-            while ((match = mentionRegex.exec(childNode.text)) !== null) {
+            while ((match = this.MENTION_REGEX.exec(childNode.text)) !== null) {
               hasMentions = true
               if (match.index > lastIndex) {
                 newContent.push({
@@ -94,7 +94,7 @@ class ClickupMarkdownPostprocessor implements MarkdownPostprocessor {
                 })
               }
 
-              lastIndex = mentionRegex.lastIndex
+              lastIndex = this.MENTION_REGEX.lastIndex
             }
 
             if (hasMentions) {
@@ -181,7 +181,7 @@ class ClickupImporter {
     console.log('========================================')
     console.log('IMPORT DATA STRUCTURE: ', JSON.stringify(importData, null, 4))
     console.log('========================================')
-    const postprocessor = new ClickupMarkdownPostprocessor(this.personsByName)
+    const postprocessor = new ClickupMarkdownPreprocessor(this.personsByName)
     await new WorkspaceImporter(this.client, this.fileUploader, importData, postprocessor).performImport()
   }
 
@@ -359,7 +359,7 @@ class ClickupImporter {
     return JSON.parse(clickup).map((comment: ClickupComment) => {
       const author = this.accountsByEmail.get(comment.by)
       return {
-        text: author !== undefined ? comment.text : `${comment.text}\n\ncomment by ${comment.by}`,
+        text: author !== undefined ? comment.text : `${comment.text}\n\n*(comment by ${comment.by})*`,
         date: new Date(comment.date).getTime(),
         author
       }
@@ -371,8 +371,7 @@ class ClickupImporter {
     const attachments: ClickupAttachment[] = JSON.parse(clickup)
     for (const attachment of attachments) {
       res.push({
-        // text: `</br> Attachment: <a href='${attachment.url}'>${attachment.title}</a>`,
-        text: `(${attachment.url})[${attachment.title}]`,
+        text: `Original attachment link: ${attachment.title}](${attachment.url})`,
         attachments: [{
           title: attachment.title,
           blobProvider: async () => { return await download(attachment.url) } // todo: handle error (broken link, or no vpn)

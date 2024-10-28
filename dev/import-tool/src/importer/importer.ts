@@ -24,7 +24,7 @@ import task, {
   type TaskType
 } from '@hcengineering/task'
 import document, { type Document, type Teamspace, getFirstRank } from '@hcengineering/document'
-import { jsonToYDocNoSchema, parseMessageMarkdown, type MarkupNode } from '@hcengineering/text'
+import { jsonToMarkup, jsonToYDocNoSchema, parseMessageMarkdown, serializeMessage, type MarkupNode } from '@hcengineering/text'
 import { yDocToBuffer } from '@hcengineering/collaboration'
 import { type Person } from '@hcengineering/contact'
 import tracker, {
@@ -123,7 +123,7 @@ export interface ImportAttachment {
   blobProvider: () => Promise<Blob>
 }
 
-export interface MarkdownPostprocessor {
+export interface MarkdownPreprocessor {
   process: (json: MarkupNode) => MarkupNode
 }
 
@@ -136,7 +136,7 @@ export class WorkspaceImporter {
     private readonly client: TxOperations,
     private readonly fileUploader: FileUploader,
     private readonly workspaceData: ImportWorkspace,
-    private readonly postprocessor: MarkdownPostprocessor
+    private readonly preprocessor: MarkdownPreprocessor
   ) {}
 
   public async performImport (): Promise<void> {
@@ -248,10 +248,11 @@ export class WorkspaceImporter {
   ): Promise<Ref<Document>> {
     const md = await doc.descrProvider()
     const json = parseMessageMarkdown(md, 'image://')
+    const processedJson = this.preprocessor.process(json)
 
     const id = generateId<Document>()
     const collabId = makeCollaborativeDoc(id, 'description')
-    const yDoc = jsonToYDocNoSchema(json, 'content')
+    const yDoc = jsonToYDocNoSchema(processedJson, 'content')
     const { documentId } = collaborativeDocParse(collabId)
     const buffer = yDocToBuffer(yDoc)
 
@@ -433,7 +434,7 @@ export class WorkspaceImporter {
     data: string
   ): Promise<CollaborativeDoc> {
     const json = parseMessageMarkdown(data ?? '', 'image://')
-    const processedJson = this.postprocessor.process(json)
+    const processedJson = this.preprocessor.process(json)
     const collabId = makeCollaborativeDoc(id, 'description')
 
     const yDoc = jsonToYDocNoSchema(processedJson, 'description')
@@ -455,11 +456,16 @@ export class WorkspaceImporter {
   }
 
   async importComment (issueId: Ref<Issue>, comment: ImportComment, projectId: Ref<Project>): Promise<void> {
-    const commentId = generateId<ChatMessage>()
+    const json = parseMessageMarkdown(comment.text ?? '', 'image://')
+    const processedJson = this.preprocessor.process(json)
+    const markup = jsonToMarkup(processedJson)
+
     const value: AttachedData<ChatMessage> = {
-      message: comment.text,
+      message: markup,
       attachments: comment.attachments?.length
     }
+
+    const commentId = generateId<ChatMessage>()
     await this.client.addCollection(
       chunter.class.ChatMessage,
       projectId,
