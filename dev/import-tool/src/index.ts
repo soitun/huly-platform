@@ -22,7 +22,7 @@ import serverClientPlugin, {
 import { program } from 'commander'
 import { importNotion } from './notion'
 import { setMetadata } from '@hcengineering/platform'
-import { getFileUploader, type FileUploader } from './fileUploader'
+import { getFileUploader, type FileUploader } from './importer/uploader'
 import { ClickupImporter } from './clickup'
 
 /**

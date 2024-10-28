@@ -1,9 +1,12 @@
+import contact, { type Person, type PersonAccount } from '@hcengineering/contact'
 import { type Ref, type Timestamp, type TxOperations } from '@hcengineering/core'
-import { download, type FileUploader } from './fileUploader'
+import { MarkupNodeType, traverseNode, type MarkupNode } from '@hcengineering/text'
+import csv from 'csvtojson'
 import { readdir, readFile } from 'fs/promises'
 import { join, parse } from 'path'
-import csv from 'csvtojson'
+import { download } from './importer/dowloader'
 import {
+  WorkspaceImporter,
   type ImportComment,
   type ImportDocument,
   type ImportIssue,
@@ -11,11 +14,9 @@ import {
   type ImportProject,
   type ImportProjectType,
   type ImportTeamspace,
-  type MarkdownPreprocessor,
-  WorkspaceImporter
+  type MarkdownPreprocessor
 } from './importer/importer'
-import contact, { type Person, type PersonAccount } from '@hcengineering/contact'
-import { MarkupNodeType, traverseNode, type MarkupNode } from '@hcengineering/text'
+import { type FileUploader } from './importer/uploader'
 
 interface ClickupTask {
   'Task ID': string
@@ -321,7 +322,7 @@ class ClickupImporter {
       name: clickup.Status
     }
 
-    const content = this.fixMultilineString(clickup['Task Content'])
+    const content = this.fixClickupString(clickup['Task Content'])
     const checklists = this.convertChecklistsToMarkdown(clickup.Checklists)
 
     const estimation = clickup['Time Estimated']
@@ -330,7 +331,8 @@ class ClickupImporter {
     const comments = this.convertToImportComments(clickup.Comments)
     const attachments = await this.convertAttachmentsToComment(clickup.Attachments)
 
-    const description = `${content}\n\n---\n${checklists}` // todo: test all the combinations
+    const separator = (content.trim() !== '' && checklists.trim() !== '' ? '\n\n---\n' : '')
+    const description = `${content.trim()}${separator}${checklists.trim()}`
 
     let assignee
     if (clickup.Assignees !== undefined) {
@@ -371,7 +373,7 @@ class ClickupImporter {
     const attachments: ClickupAttachment[] = JSON.parse(clickup)
     for (const attachment of attachments) {
       res.push({
-        text: `Original attachment link: ${attachment.title}](${attachment.url})`,
+        text: `ClickUp attachment link: [${attachment.title}](${attachment.url})`,
         attachments: [{
           title: attachment.title,
           blobProvider: async () => { return await download(attachment.url) } // todo: handle error (broken link, or no vpn)
@@ -417,8 +419,8 @@ class ClickupImporter {
     }, new Map())
   }
 
-  private fixMultilineString (content: string): string {
-    return content.split('\\n').join('\n')
+  private fixClickupString (content: string): string {
+    return content === 'null' ? '' : content.replaceAll('\\n', '\n')
   }
 
   private getProjectIdentifier (projectName: string): string {

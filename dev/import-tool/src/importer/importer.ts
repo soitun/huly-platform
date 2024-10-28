@@ -15,7 +15,7 @@ import core, {
   type Status,
   type Account
 } from '@hcengineering/core'
-import { type FileUploader } from '../fileUploader'
+import { type FileUploader } from './uploader'
 import task, {
   createProjectType,
   makeRank,
@@ -24,7 +24,7 @@ import task, {
   type TaskType
 } from '@hcengineering/task'
 import document, { type Document, type Teamspace, getFirstRank } from '@hcengineering/document'
-import { jsonToMarkup, jsonToYDocNoSchema, parseMessageMarkdown, serializeMessage, type MarkupNode } from '@hcengineering/text'
+import { jsonToMarkup, jsonToYDocNoSchema, parseMessageMarkdown, type MarkupNode } from '@hcengineering/text'
 import { yDocToBuffer } from '@hcengineering/collaboration'
 import { type Person } from '@hcengineering/contact'
 import tracker, {
@@ -120,7 +120,7 @@ export interface ImportComment {
 
 export interface ImportAttachment {
   title: string
-  blobProvider: () => Promise<Blob>
+  blobProvider: () => Promise<Blob | null>
 }
 
 export interface MarkdownPreprocessor {
@@ -481,6 +481,8 @@ export class WorkspaceImporter {
     if (comment.attachments !== undefined) {
       for (const attach of comment.attachments) {
         const blob = await attach.blobProvider()
+        if (blob === null) continue
+
         const file = new File([blob], attach.title)
 
         const form = new FormData()
