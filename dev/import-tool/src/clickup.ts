@@ -156,11 +156,7 @@ class ClickupImporter {
       const parsedFileName = parse(file)
       const extension = parsedFileName.ext.toLowerCase()
       const fullPath = join(dir, file)
-      if (file === 'persons.yaml') {
-        console.log('Found Persons List: ', fullPath)
-        const personsData = this.processPersonsFile(fullPath)
-        persons.push(...personsData)
-      } else if (extension === '.md') {
+      if (extension === '.md') {
         console.log('Found Wiki Document: ', fullPath)
         teamspace.docs.push(this.processClickupWiki(fullPath))
       } else if (extension === '.csv') {
@@ -325,8 +321,8 @@ class ClickupImporter {
     const content = this.fixClickupString(clickup['Task Content'])
     const checklists = this.convertChecklistsToMarkdown(clickup.Checklists)
 
-    const estimation = clickup['Time Estimated']
-    const remainingTime = estimation - clickup['Time Spent']
+    const estimation = this.millisecondsToHours(clickup['Time Estimated'])
+    const remainingTime = estimation - this.millisecondsToHours(clickup['Time Spent'])
 
     const comments = this.convertToImportComments(clickup.Comments)
     const attachments = await this.convertAttachmentsToComment(clickup.Attachments)
@@ -445,9 +441,8 @@ class ClickupImporter {
     }
   }
 
-  private processPersonsFile (fullPath: string): ImportPerson[] {
-    console.error('Function not implemented.')
-    return []
+  private millisecondsToHours (milliseconds: number): number {
+    return milliseconds / (1000 * 60 * 60)
   }
 }
 

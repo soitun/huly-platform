@@ -390,6 +390,10 @@ export class WorkspaceImporter {
 
     const collabId = await this.importIssueDescription(issueId, await issue.descrProvider())
 
+    const estimation = issue.estimation ?? 0
+    const remainingTime = issue.remainingTime ?? 0
+    const reportedTime = estimation - remainingTime
+
     const status = await this.findIssueStatusByName(issue.status.name)
     await this.client.addCollection(
       tracker.class.Issue,
@@ -410,9 +414,9 @@ export class WorkspaceImporter {
         subIssues: 0, // todo
         dueDate: null,
         parents: parentsInfo,
-        reportedTime: 0,
-        remainingTime: issue.remainingTime ?? 0,
-        estimation: issue.estimation ?? 0,
+        remainingTime,
+        estimation,
+        reportedTime,
         reports: 0,
         childInfo: [],
         identifier,
