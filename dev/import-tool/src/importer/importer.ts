@@ -426,7 +426,11 @@ export class WorkspaceImporter {
     )
 
     if (issue.comments !== undefined) {
-      for (const comment of issue.comments) {
+      const comments = issue.comments.sort((a, b) => {
+        const now = Date.now()
+        return (a.date ?? now) - (b.date ?? now)
+      })
+      for (const comment of comments) {
         await this.importComment(issueId, comment, project._id)
       }
     }
