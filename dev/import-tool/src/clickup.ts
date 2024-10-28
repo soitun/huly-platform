@@ -350,7 +350,6 @@ class ClickupImporter {
 
     return {
       class: 'tracker.class.Issue',
-      taskType: 'NEW! ClickUp issue',
       title: clickup['Task Name'],
       descrProvider: () => {
         return Promise.resolve(description)
@@ -360,11 +359,7 @@ class ClickupImporter {
       remainingTime,
       comments: comments.concat(attachments).concat(serviceComments),
       subdocs: [],
-      assignee,
-      customAttributes: new Map([
-        ['clickupId', clickup['Task ID']],
-        ['clickupAssignee', clickup.Assignees]
-      ])
+      assignee
     }
   }
 
@@ -450,19 +445,12 @@ class ClickupImporter {
       }
     })
     return {
-      name: 'NEW! ClickUp project',
+      name: 'ClickUp project',
       description: 'For issues imported from ClickUp',
       taskTypes: [
         {
-          name: 'NEW! ClickUp issue',
-          statuses,
-          attributes: [{
-            name: 'clickupId',
-            label: 'ClickUp ID'
-          }, {
-            name: 'clickupAssignee',
-            label: 'ClickUp Assignees'
-          }]
+          name: 'ClickUp issue',
+          statuses
         }
       ]
     }
