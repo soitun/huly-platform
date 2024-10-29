@@ -1,14 +1,25 @@
+//
+// Copyright © 2024 Hardcore Engineering Inc.
+//
+// Licensed under the Eclipse Public License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License. You may
+// obtain a copy of the License at https://www.eclipse.org/legal/epl-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+//
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 import contact, { type Person, type PersonAccount } from '@hcengineering/contact'
 import { type Ref, type Timestamp, type TxOperations } from '@hcengineering/core'
 import { MarkupNodeType, traverseNode, type MarkupNode } from '@hcengineering/text'
 import csv from 'csvtojson'
-import { readFile } from 'fs/promises'
-import { parse } from 'path'
 import { download } from './importer/dowloader'
 import {
   WorkspaceImporter,
   type ImportComment,
-  type ImportDocument,
   type ImportIssue,
   type ImportProject,
   type ImportProjectType,
@@ -26,8 +37,8 @@ interface ClickupTask {
   Assignees: string
   Priority?: number
   'Space Name': string
-  Checklists: string // todo: obj
-  Comments: string // todo: obj[]
+  Checklists: string
+  Comments: string
   'Time Estimated': number
   'Time Spent': number
 }
@@ -204,15 +215,14 @@ class ClickupImporter {
     }
 
     for (const [clickupId, issue] of importIssuesByClickupId) {
-      if (issue.clickupParentId !== undefined && issue.clickupParentId !== 'null') {
-        const parent = importIssuesByClickupId.get(issue.clickupParentId)
+      if (!this.clickupBlankString(issue.clickupParentId)) {
+        const parent = importIssuesByClickupId.get(issue.clickupParentId as string)
         if (parent === undefined) {
           throw new Error(`Parent not found: ${issue.clickupParentId} (for task: ${clickupId})`)
         }
         parent.subdocs.push(issue)
-      } else if (issue.clickupProjectName !== undefined && issue.clickupProjectName !== 'null') {
-        // todo: blank string
-        const project = importProjectsByName.get(issue.clickupProjectName)
+      } else if (!this.clickupBlankString(issue.clickupProjectName)) {
+        const project = importProjectsByName.get(issue.clickupProjectName as string)
         if (project === undefined) {
           throw new Error(`Project not found: ${issue.clickupProjectName} (for task: ${clickupId})`)
         }
@@ -226,6 +236,11 @@ class ClickupImporter {
       projects: Array.from(importProjectsByName.values()),
       projectType: importProjectType
     }
+  }
+
+  private clickupBlankString (str: string | undefined): boolean {
+    if (str === undefined || str === null) return true
+    return str.trim().length === 0 || str === 'null'
   }
 
   private async convertToImportIssue (
@@ -305,7 +320,7 @@ class ClickupImporter {
         text: `ClickUp attachment link: [${attachment.title}](${attachment.url})`,
         attachments: [{
           title: attachment.title,
-          blobProvider: async () => { return await download(attachment.url) } // todo: handle error (broken link, or no vpn)
+          blobProvider: async () => { return await download(attachment.url) }
         }]
       })
     }

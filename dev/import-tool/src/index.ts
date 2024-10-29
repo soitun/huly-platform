@@ -22,7 +22,7 @@ import serverClientPlugin, {
 import { program } from 'commander'
 import { importNotion } from './notion'
 import { setMetadata } from '@hcengineering/platform'
-import { getFileUploader, type FileUploader } from './importer/uploader'
+import { FrontFileUploader, type FileUploader } from './importer/uploader'
 import { ClickupImporter } from './clickup'
 
 /**
@@ -78,9 +78,9 @@ export function importTool (): void {
       return
     }
     const client = new TxOperations(connection, acc._id)
-    const uploader = getFileUploader(getFrontUrl(), selectedWs.token)
+    const fileUploader = new FrontFileUploader(getFrontUrl(), selectedWs.token)
     try {
-      await f(client, uploader)
+      await f(client, fileUploader)
     } catch (err: any) {
       console.error(err)
     }

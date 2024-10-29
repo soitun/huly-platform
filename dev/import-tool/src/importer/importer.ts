@@ -1,34 +1,46 @@
+//
+// Copyright © 2024 Hardcore Engineering Inc.
+//
+// Licensed under the Eclipse Public License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License. You may
+// obtain a copy of the License at https://www.eclipse.org/legal/epl-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+//
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 import attachment, { type Attachment } from '@hcengineering/attachment'
+import chunter, { type ChatMessage } from '@hcengineering/chunter'
+import { yDocToBuffer } from '@hcengineering/collaboration'
+import { type Person } from '@hcengineering/contact'
 import core, {
+  type Account,
   type AttachedData,
   type CollaborativeDoc,
-  collaborativeDocParse,
   type Data,
+  type Doc,
+  type DocumentQuery,
   generateId,
   makeCollaborativeDoc,
   type Mixin,
   type Ref,
   SortingOrder,
-  type Timestamp,
-  type TxOperations,
-  type DocumentQuery,
   type Status,
-  type Account,
-  type Doc,
-  type Blob as PlatformBlob
+  type Timestamp,
+  type TxOperations
 } from '@hcengineering/core'
-import { type FileUploader } from './uploader'
+import document, { type Document, getFirstRank, type Teamspace } from '@hcengineering/document'
 import task, {
   createProjectType,
   makeRank,
-  type TaskTypeWithFactory,
   type ProjectType,
-  type TaskType
+  type TaskType,
+  type TaskTypeWithFactory
 } from '@hcengineering/task'
-import document, { type Document, type Teamspace, getFirstRank } from '@hcengineering/document'
-import { jsonToMarkup, jsonToYDocNoSchema, parseMessageMarkdown, type MarkupNode } from '@hcengineering/text'
-import { yDocToBuffer } from '@hcengineering/collaboration'
-import { type Person } from '@hcengineering/contact'
+import { jsonToMarkup, jsonToYDocNoSchema, type MarkupNode, parseMessageMarkdown } from '@hcengineering/text'
 import tracker, {
   type Issue,
   type IssueParentInfo,
@@ -37,7 +49,7 @@ import tracker, {
   type Project,
   TimeReportDayType
 } from '@hcengineering/tracker'
-import chunter, { type ChatMessage } from '@hcengineering/chunter'
+import { type FileUploader, type UploadResult } from './uploader'
 
 export interface ImportWorkspace {
   persons?: ImportPerson[]
@@ -71,7 +83,6 @@ export interface ImportSpace<T extends ImportDoc> {
   class: string
   name: string
   description?: string
-  // members?: ImportPerson[] // todo: person vs account
 
   docs: T[]
 }
@@ -116,7 +127,7 @@ export interface ImportIssue extends ImportDoc {
 
 export interface ImportComment {
   text: string
-  author?: Ref<Account>// todo: person vs account
+  author?: Ref<Account>
   date?: Timestamp
   attachments?: ImportAttachment[]
 }
@@ -128,12 +139,6 @@ export interface ImportAttachment {
 
 export interface MarkdownPreprocessor {
   process: (json: MarkupNode) => MarkupNode
-}
-
-// todo: move to fileUploader
-interface UploadResult {
-  key: 'file'
-  id: Ref<PlatformBlob>
 }
 
 export class WorkspaceImporter {
@@ -194,7 +199,7 @@ export class WorkspaceImporter {
           return {
             name: status.name,
             ofAttribute: tracker.attribute.IssueStatus,
-            category: task.statusCategory.Active // todo: Unsorted?
+            category: task.statusCategory.Active
           }
         })
         taskTypes.push({
@@ -346,15 +351,15 @@ export class WorkspaceImporter {
       name: project.name,
       description: project.description ?? '',
       private: project.private,
-      members: [], // todo
-      owners: [], // todo
+      members: [],
+      owners: [],
       archived: false,
       autoJoin: project.autoJoin,
       identifier,
       sequence: 0,
       defaultIssueStatus: defaultIssueStatus ?? tracker.status.Backlog, // todo: test with no status
       defaultTimeReportDay: TimeReportDayType.PreviousWorkDay,
-      type: projectType ?? generateId() // tracker.ids.ClassicProjectType // todo: fixme! handle project type is not set or created before the import
+      type: projectType as Ref<ProjectType>
     }
     await this.client.createDoc(tracker.class.Project, core.space.Space, projectData, projectId)
 
@@ -390,10 +395,10 @@ export class WorkspaceImporter {
       component: null,
       number,
       status,
-      priority: IssuePriority.NoPriority, // todo
+      priority: IssuePriority.NoPriority,
       rank,
       comments: issue.comments?.length ?? 0,
-      subIssues: 0, // todo
+      subIssues: issue.subdocs.length,
       dueDate: null,
       parents: parentsInfo,
       remainingTime,
@@ -482,7 +487,7 @@ export class WorkspaceImporter {
       value,
       commentId,
       comment.date,
-      comment.author // todo: as Ref<Account>
+      comment.author
     )
 
     if (comment.attachments !== undefined) {
@@ -518,7 +523,7 @@ export class WorkspaceImporter {
     const attachmentId = generateId<Attachment>()
     const file = new File([blob], attach.title)
 
-    const response = await this.uploadFile(attachmentId, attach.title, file)
+    const response = await this.fileUploader.uploadFile(attachmentId, attach.title, file)
     if (response.status === 200) {
       const responseText = await response.text()
       if (responseText !== undefined) {
@@ -560,36 +565,8 @@ export class WorkspaceImporter {
     const yDoc = jsonToYDocNoSchema(processedJson, field)
     const buffer = yDocToBuffer(yDoc)
 
-    await this.uploadCollaborativeDoc(id, collabId, buffer)
+    await this.fileUploader.uploadCollaborativeDoc(id, collabId, buffer)
     return collabId
-  }
-
-  private async uploadCollaborativeDoc (
-    id: Ref<Doc>,
-    collabId: CollaborativeDoc,
-    data: Buffer
-  ): Promise<Response> {
-    const file = new File([data], collabId)
-    const { documentId } = collaborativeDocParse(collabId)
-    return await this.uploadFile(id, documentId, file, 'application/ydoc')
-  }
-
-  // todo: move to fileUploader
-  private async uploadFile (
-    id: Ref<Doc>,
-    name: string,
-    file: File,
-    contentType?: string
-  ): Promise<Response> {
-    const form = new FormData()
-    form.append('file', file, name)
-    form.append('type', contentType ?? file.type)
-    form.append('size', file.size.toString()) // todo: file.size
-    form.append('name', file.name)
-    form.append('id', id)
-    form.append('data', new Blob([file])) // todo: test new Blob([blob])
-
-    return await this.fileUploader(id, form)
   }
 
   async findIssueStatusByName (name: string): Promise<Ref<IssueStatus>> {
