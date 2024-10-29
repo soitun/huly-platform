@@ -54,6 +54,8 @@ interface ClickupAttachment {
   url: string
 }
 
+type ClickupChecklist = Record<string, string[]>
+
 interface ImportIssueEx extends ImportIssue {
   clickupParentId?: string
   clickupProjectName?: string
@@ -328,12 +330,13 @@ class ClickupImporter {
   }
 
   private convertChecklistsToMarkdown (clickup: string): string {
-    const checklists = JSON.parse(clickup)
+    const checklists = JSON.parse(clickup) as ClickupChecklist
     let huly: string = '\n'
     for (const [key, values] of Object.entries(checklists)) {
       huly += `**${key}**\n`
-      for (const value of values as string[]) {
-        huly += `* [ ] ${value} \n` // todo: test and fix for checked items
+      for (const value of values) {
+        // no way to check if item is checked, this info doesn't exported from ClickUp 🤯
+        huly += `* [ ] ${value} \n`
       }
       huly += '\n'
     }
