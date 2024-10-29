@@ -617,6 +617,9 @@ dependencies:
   '@rush-temp/pod-gmail':
     specifier: file:./projects/pod-gmail.tgz
     version: file:projects/pod-gmail.tgz(ts-node@10.9.2)
+  '@rush-temp/pod-indexer':
+    specifier: file:./projects/pod-indexer.tgz
+    version: file:projects/pod-indexer.tgz
   '@rush-temp/pod-love':
     specifier: file:./projects/pod-love.tgz
     version: file:projects/pod-love.tgz(bufferutil@4.0.8)(utf-8-validate@6.0.4)
@@ -31232,6 +31235,47 @@ packages:
       - socks
       - supports-color
       - ts-node
+    dev: false
+
+  file:projects/pod-indexer.tgz:
+    resolution: {integrity: sha512-NUeYvGNXQvrdWsguU+ejU4eJZ2Dpb9hVFrPItVrGafVPXxkhbOtmgampiDpS6ClxLbqXL5b2TqshMfQHFRiNAQ==, tarball: file:projects/pod-indexer.tgz}
+    name: '@rush-temp/pod-indexer'
+    version: 0.0.0
+    dependencies:
+      '@koa/cors': 5.0.0
+      '@types/jest': 29.5.12
+      '@types/koa': 2.15.0
+      '@types/koa-bodyparser': 4.3.12
+      '@types/koa-router': 7.4.8
+      '@types/koa__cors': 5.0.0
+      '@types/node': 20.11.19
+      '@typescript-eslint/eslint-plugin': 6.21.0(@typescript-eslint/parser@6.21.0)(eslint@8.56.0)(typescript@5.6.2)
+      '@typescript-eslint/parser': 6.21.0(eslint@8.56.0)(typescript@5.6.2)
+      cross-env: 7.0.3
+      dotenv: 16.0.3
+      esbuild: 0.20.1
+      eslint: 8.56.0
+      eslint-config-standard-with-typescript: 40.0.0(@typescript-eslint/eslint-plugin@6.21.0)(eslint-plugin-import@2.29.1)(eslint-plugin-n@15.7.0)(eslint-plugin-promise@6.1.1)(eslint@8.56.0)(typescript@5.6.2)
+      eslint-plugin-import: 2.29.1(eslint@8.56.0)
+      eslint-plugin-n: 15.7.0(eslint@8.56.0)
+      eslint-plugin-promise: 6.1.1(eslint@8.56.0)
+      jest: 29.7.0(@types/node@20.11.19)(ts-node@10.9.2)
+      koa: 2.15.3
+      koa-bodyparser: 4.4.1
+      koa-router: 12.0.1
+      prettier: 3.2.5
+      ts-jest: 29.1.2(esbuild@0.20.1)(jest@29.7.0)(typescript@5.6.2)
+      ts-node: 10.9.2(@types/node@20.11.19)(typescript@5.6.2)
+      typescript: 5.6.2
+    transitivePeerDependencies:
+      - '@babel/core'
+      - '@jest/types'
+      - '@swc/core'
+      - '@swc/wasm'
+      - babel-jest
+      - babel-plugin-macros
+      - node-notifier
+      - supports-color
     dev: false
 
   file:projects/pod-love.tgz(bufferutil@4.0.8)(utf-8-validate@6.0.4):

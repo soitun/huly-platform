@@ -15,6 +15,7 @@
 
 import type {
   ContentTextAdapter,
+  ContentTextAdapterConfiguration,
   FullTextAdapter,
   FullTextAdapterFactory,
   SessionFindAll
@@ -38,9 +39,11 @@ export type FullTextPipelineStageFactory = (
 ) => FullTextPipelineStage[]
 
 export interface FulltextDBConfiguration {
-  fulltextAdapter?: {
+  fulltextAdapter: {
     factory: FullTextAdapterFactory
     url: string
     stages: FullTextPipelineStageFactory
   }
+  contentAdapters: Record<string, ContentTextAdapterConfiguration>
+  defaultContentAdapter: string
 }

@@ -313,7 +313,11 @@ class ElasticAdapter implements FullTextAdapter {
       }
 
       return resp
-    } catch (err) {
+    } catch (err: any) {
+      if (err.name === 'ConnectionError') {
+        console.info('Elastic DB is not available')
+        return { docs: [] }
+      }
       console.error('elastic error', JSON.stringify(err, null, 2))
       return { docs: [] }
     }
@@ -393,7 +397,11 @@ class ElasticAdapter implements FullTextAdapter {
       })
       const hits = result.body.hits.hits as any[]
       return hits.map((hit) => ({ ...hit._source, _score: hit._score }))
-    } catch (err) {
+    } catch (err: any) {
+      if (err.name === 'ConnectionError') {
+        console.info('Elastic DB is not available')
+        return []
+      }
       console.error(JSON.stringify(err, null, 2))
       return []
     }

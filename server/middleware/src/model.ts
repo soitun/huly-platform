@@ -117,15 +117,14 @@ export class ModelMiddleware extends BaseMiddleware implements Middleware {
 
   private setModel (model: Tx[]): void {
     let last = ''
-    this.hashes = new Map(
-      model.map((it, index) => {
-        const h = crypto.createHash('sha1')
-        h.update(last)
-        h.update(JSON.stringify(it))
-        last = h.digest('hex')
-        return [last, index]
-      })
-    )
+    const values: [string, number][] = model.map((it, index) => {
+      const h = crypto.createHash('sha1')
+      h.update(last)
+      h.update(JSON.stringify(it))
+      last = h.digest('hex')
+      return [last, index]
+    })
+    this.hashes = new Map(values)
     this.setLastHash(last)
   }
 

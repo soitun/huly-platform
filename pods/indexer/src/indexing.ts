@@ -7,15 +7,7 @@ import {
   type SessionFindAll,
   type StorageAdapter
 } from '@hcengineering/server-core'
-
-import {
-  ContentRetrievalStage,
-  FullSummaryStage,
-  FullTextPushStage,
-  IndexedFieldStage,
-  globalIndexer,
-  type FullTextPipelineStage
-} from '@hcengineering/server-indexer'
+import { ContentRetrievalStage, FullSummaryStage, FullTextPushStage, globalIndexer, IndexedFieldStage, type FullTextPipelineStage } from '@hcengineering/server-indexer'
 
 export function createIndexStages (
   fullText: MeasureContext,

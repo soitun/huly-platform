@@ -1432,6 +1432,11 @@
       "shouldPublish": false
     },
     {
+      "packageName": "@hcengineering/pod-indexer",
+      "projectFolder": "pods/indexer",
+      "shouldPublish": false
+    },
+    {
       "packageName": "@hcengineering/hr",
       "projectFolder": "plugins/hr",
       "shouldPublish": true

@@ -14,7 +14,7 @@
 //
 
 import { Analytics } from '@hcengineering/analytics'
-import { generateId, toWorkspaceString, type MeasureContext } from '@hcengineering/core'
+import { generateId, toWorkspaceString, type MeasureContext, type Tx } from '@hcengineering/core'
 import { UNAUTHORIZED, unknownStatus } from '@hcengineering/platform'
 import { RPCHandler, type Response } from '@hcengineering/rpc'
 import {
@@ -31,8 +31,8 @@ import {
   LOGGING_ENABLED,
   type ConnectionSocket,
   type HandleRequestFunction,
-  type SessionManager,
   type PipelineFactory,
+  type SessionManager,
   type StorageAdapter
 } from '@hcengineering/server-core'
 import { decodeToken, type Token } from '@hcengineering/server-token'
@@ -285,6 +285,36 @@ export function startHttpServer (
     } catch (err: any) {
       Analytics.handleError(err)
       ctx.error('/api/v1/blob get error', { err })
+    }
+  })
+
+  app.put('/api/v1/broadcast', (req, res) => {
+    try {
+      const token = req.query.token as string
+      decodeToken(token)
+      const ws = sessions.workspaces.get(req.query.workspace as string)
+      if (ws !== undefined) {
+        // push the data to body
+        const body: Buffer[] = []
+        req.on('data', (chunk) => {
+          body.push(chunk)
+        })
+          .on('end', () => {
+          // on end of data, perform necessary action
+            const data = JSON.parse(Buffer.concat(body as any).toString())
+            if (Array.isArray(data)) {
+              sessions.broadcastAll(ws, data as Tx[])
+            } else {
+              sessions.broadcastAll(ws, [data as unknown as Tx])
+            }
+            res.end()
+          })
+      }
+    } catch (err: any) {
+      Analytics.handleError(err)
+      ctx.error('error', { err })
+      res.writeHead(404, {})
+      res.end()
     }
   })
 
