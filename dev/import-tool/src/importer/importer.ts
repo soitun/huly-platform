@@ -13,7 +13,9 @@ import core, {
   type TxOperations,
   type DocumentQuery,
   type Status,
-  type Account
+  type Account,
+  type Doc,
+  type Blob as PlatformBlob
 } from '@hcengineering/core'
 import { type FileUploader } from './uploader'
 import task, {
@@ -68,6 +70,7 @@ export interface ImportStatus {
 export interface ImportSpace<T extends ImportDoc> {
   class: string
   name: string
+  description?: string
   // members?: ImportPerson[] // todo: person vs account
 
   docs: T[]
@@ -127,6 +130,12 @@ export interface MarkdownPreprocessor {
   process: (json: MarkupNode) => MarkupNode
 }
 
+// todo: move to fileUploader
+interface UploadResult {
+  key: 'file'
+  id: Ref<PlatformBlob>
+}
+
 export class WorkspaceImporter {
   private readonly personsByName = new Map<string, Ref<Person>>()
   private readonly issueStatusByName = new Map<string, Ref<IssueStatus>>()
@@ -140,32 +149,43 @@ export class WorkspaceImporter {
   ) {}
 
   public async performImport (): Promise<void> {
-    if (this.workspaceData.persons !== undefined) {
-      for (const person of this.workspaceData.persons) {
-        // todo create people
-        this.personsByName.set(person.name, generateId())
-      }
-    }
+    await this.importPersons()
+    await this.importProjectTypes()
+    await this.importSpaces()
+  }
 
-    if (this.workspaceData.projectTypes !== undefined) {
-      for (const projectType of this.workspaceData.projectTypes) {
-        const projectTypeId = await this.importProjectType(projectType)
-        this.projectTypeByName.set(projectType.name, projectTypeId)
-      }
-    }
+  private async importPersons (): Promise<void> {
+    if (this.workspaceData.persons === undefined) return
 
-    if (this.workspaceData.spaces !== undefined) {
-      for (const space of this.workspaceData.spaces) {
-        if (space.class === 'document.class.TeamSpace') {
-          await this.importTeamspace(space as ImportTeamspace)
-        } else if (space.class === 'tracker.class.Project') {
-          await this.importProject(space as ImportProject)
-        }
+    for (const person of this.workspaceData.persons) {
+      const personId = generateId<Person>()
+      this.personsByName.set(person.name, personId)
+      // TODO: Implement person creation
+    }
+  }
+
+  private async importProjectTypes (): Promise<void> {
+    if (this.workspaceData.projectTypes === undefined) return
+
+    for (const projectType of this.workspaceData.projectTypes) {
+      const projectTypeId = await this.createProjectTypeWithTaskTypes(projectType)
+      this.projectTypeByName.set(projectType.name, projectTypeId)
+    }
+  }
+
+  private async importSpaces (): Promise<void> {
+    if (this.workspaceData.spaces === undefined) return
+
+    for (const space of this.workspaceData.spaces) {
+      if (space.class === 'document.class.TeamSpace') {
+        await this.importTeamspace(space as ImportTeamspace)
+      } else if (space.class === 'tracker.class.Project') {
+        await this.importProject(space as ImportProject)
       }
     }
   }
 
-  async importProjectType (projectType: ImportProjectType): Promise<Ref<ProjectType>> {
+  async createProjectTypeWithTaskTypes (projectType: ImportProjectType): Promise<Ref<ProjectType>> {
     const taskTypes: TaskTypeWithFactory[] = []
     if (projectType.taskTypes !== undefined) {
       for (const taskType of projectType.taskTypes) {
@@ -207,19 +227,19 @@ export class WorkspaceImporter {
   async importTeamspace (space: ImportTeamspace): Promise<Ref<Teamspace>> {
     const teamspaceId = await this.createTeamspace(space)
     for (const doc of space.docs) {
-      await this.createDocumentsWithSubdocs(doc, document.ids.NoParent, teamspaceId)
+      await this.createDocumentWithSubdocs(doc, document.ids.NoParent, teamspaceId)
     }
     return teamspaceId
   }
 
-  async createDocumentsWithSubdocs (
+  async createDocumentWithSubdocs (
     doc: ImportDocument,
     parentId: Ref<Document>,
     teamspaceId: Ref<Teamspace>
   ): Promise<Ref<Document>> {
     const documentId = await this.createDocument(doc, parentId, teamspaceId)
     for (const child of doc.subdocs) {
-      await this.createDocumentsWithSubdocs(child, documentId, teamspaceId)
+      await this.createDocumentWithSubdocs(child, documentId, teamspaceId)
     }
     return documentId
   }
@@ -228,7 +248,7 @@ export class WorkspaceImporter {
     const teamspaceId = generateId<Teamspace>()
     const data = {
       type: document.spaceType.DefaultTeamspaceType,
-      description: 'Imported from Notion',
+      description: space.description ?? '',
       title: space.name,
       name: space.name,
       private: false,
@@ -246,25 +266,9 @@ export class WorkspaceImporter {
     parentId: Ref<Document>,
     teamspaceId: Ref<Teamspace>
   ): Promise<Ref<Document>> {
-    const md = await doc.descrProvider()
-    const json = parseMessageMarkdown(md, 'image://')
-    const processedJson = this.preprocessor.process(json)
-
     const id = generateId<Document>()
-    const collabId = makeCollaborativeDoc(id, 'description')
-    const yDoc = jsonToYDocNoSchema(processedJson, 'content')
-    const { documentId } = collaborativeDocParse(collabId)
-    const buffer = yDocToBuffer(yDoc)
-
-    const form = new FormData()
-    const file = new File([new Blob([buffer])], doc.title)
-    form.append('file', file, documentId)
-    form.append('type', 'application/ydoc')
-    form.append('size', buffer.length.toString())
-    form.append('name', doc.title)
-    form.append('id', id)
-    form.append('data', new Blob([buffer])) // ?
-    await this.fileUploader(id, form)
+    const content = await doc.descrProvider()
+    const collabId = await this.createCollaborativeContent(id, 'content', content)
 
     const lastRank = await getFirstRank(this.client, teamspaceId, parentId)
     const rank = makeRank(lastRank, undefined)
@@ -290,13 +294,13 @@ export class WorkspaceImporter {
     const projectId = await this.createProject(project)
     console.log('Project created: ' + projectId)
 
-    const hulyProject = await this.client.findOne(tracker.class.Project, { _id: projectId })
-    if (hulyProject === undefined) {
+    const projectDoc = await this.client.findOne(tracker.class.Project, { _id: projectId })
+    if (projectDoc === undefined) {
       throw new Error('Project not found: ' + projectId)
     }
 
     for (const issue of project.docs) {
-      await this.createIssueWithSubissues(issue, tracker.ids.NoParent, hulyProject, [])
+      await this.createIssueWithSubissues(issue, tracker.ids.NoParent, projectDoc, [])
     }
     return projectId
   }
@@ -306,28 +310,28 @@ export class WorkspaceImporter {
     parentId: Ref<Issue>,
     project: Project,
     parentsInfo: IssueParentInfo[]
-  ): Promise<Ref<Issue>> {
+  ): Promise<{ id: Ref<Issue>, identifier: string }> {
     console.log('Create issue: ', issue.title)
-    const issueId = await this.createIssue(issue, project, parentId, parentsInfo)
-    console.log('Issue created: ', issueId)
+    const issueResult = await this.createIssue(issue, project, parentId, parentsInfo)
+    console.log('Issue created: ', issueResult)
 
     if (issue.subdocs.length > 0) {
       const parentsInfoEx = [
         {
-          parentId: issueId.id,
+          parentId: issueResult.id,
           parentTitle: issue.title,
           space: project._id,
-          identifier: issueId.identifier
+          identifier: issueResult.identifier
         },
         ...parentsInfo
       ]
 
       for (const child of issue.subdocs) {
-        await this.createIssueWithSubissues(child as ImportIssue, issueId.id, project, parentsInfoEx)
+        await this.createIssueWithSubissues(child as ImportIssue, issueResult.id, project, parentsInfoEx)
       }
     }
 
-    return issueId.id
+    return issueResult
   }
 
   async createProject (project: ImportProject): Promise<Ref<Project>> {
@@ -354,7 +358,7 @@ export class WorkspaceImporter {
     }
     await this.client.createDoc(tracker.class.Project, core.space.Space, projectData, projectId)
 
-    const mixinId = `${this.projectTypeByName.get(project.projectType.name)}:type:mixin` as Ref<Mixin<Project>>
+    const mixinId = `${projectType}:type:mixin` as Ref<Mixin<Project>>
     await this.client.createMixin(projectId, tracker.class.Project, core.space.Space, mixinId, {})
 
     return projectId
@@ -367,103 +371,98 @@ export class WorkspaceImporter {
     parentsInfo: IssueParentInfo[]
   ): Promise<{ id: Ref<Issue>, identifier: string }> {
     const issueId = generateId<Issue>()
-    const lastOne = await this.client.findOne<Issue>(
-      tracker.class.Issue,
-      { space: project._id },
-      { sort: { rank: SortingOrder.Descending } }
-    )
-    const incResult = await this.client.updateDoc(
-      tracker.class.Project,
-      core.space.Space,
-      project._id,
-      {
-        $inc: { sequence: 1 }
-      },
-      true
-    )
+    const content = await issue.descrProvider()
+    const collabId = await this.createCollaborativeContent(issueId, 'description', content)
 
-    const number = (incResult as any).object.sequence
-    const identifier = `${project?.identifier}-${number}`
-
-    const taskKind = project?.type !== undefined ? { parent: project.type } : {}
-    const kind = (await this.client.findOne(task.class.TaskType, taskKind)) as TaskType
-
-    const collabId = await this.importIssueDescription(issueId, await issue.descrProvider())
+    const { number, identifier } = await this.getNextIssueIdentifier(project)
+    const kind = await this.getIssueKind(project)
+    const rank = await this.getIssueRank(project)
+    const status = await this.findIssueStatusByName(issue.status.name)
 
     const estimation = issue.estimation ?? 0
     const remainingTime = issue.remainingTime ?? 0
     const reportedTime = estimation - remainingTime
 
-    const status = await this.findIssueStatusByName(issue.status.name)
+    const issueData: AttachedData<Issue> = {
+      title: issue.title,
+      description: collabId,
+      assignee: issue.assignee ?? null,
+      component: null,
+      number,
+      status,
+      priority: IssuePriority.NoPriority, // todo
+      rank,
+      comments: issue.comments?.length ?? 0,
+      subIssues: 0, // todo
+      dueDate: null,
+      parents: parentsInfo,
+      remainingTime,
+      estimation,
+      reportedTime,
+      reports: 0,
+      childInfo: [],
+      identifier,
+      kind: kind._id
+    }
+
     await this.client.addCollection(
       tracker.class.Issue,
       project._id,
       parentId,
       tracker.class.Issue,
       'subIssues',
-      {
-        title: issue.title,
-        description: collabId,
-        assignee: issue.assignee ?? null,
-        component: null,
-        number,
-        status,
-        priority: IssuePriority.NoPriority, // todo
-        rank: makeRank(lastOne?.rank, undefined),
-        comments: issue.comments?.length ?? 0,
-        subIssues: 0, // todo
-        dueDate: null,
-        parents: parentsInfo,
-        remainingTime,
-        estimation,
-        reportedTime,
-        reports: 0,
-        childInfo: [],
-        identifier,
-        kind: kind._id
-      },
+      issueData,
       issueId
     )
 
     if (issue.comments !== undefined) {
-      const comments = issue.comments.sort((a, b) => {
-        const now = Date.now()
-        return (a.date ?? now) - (b.date ?? now)
-      })
-      for (const comment of comments) {
-        await this.importComment(issueId, comment, project._id)
-      }
+      await this.importComments(issueId, issue.comments, project._id)
     }
     return { id: issueId, identifier }
   }
 
-  async importIssueDescription (
-    id: Ref<Issue>,
-    data: string
-  ): Promise<CollaborativeDoc> {
-    const json = parseMessageMarkdown(data ?? '', 'image://')
-    const processedJson = this.preprocessor.process(json)
-    const collabId = makeCollaborativeDoc(id, 'description')
-
-    const yDoc = jsonToYDocNoSchema(processedJson, 'description')
-    const { documentId } = collaborativeDocParse(collabId)
-    const buffer = yDocToBuffer(yDoc)
-
-    const form = new FormData()
-    const file = new File([new Blob([buffer])], collabId)
-    form.append('file', file, documentId)
-    form.append('type', 'application/ydoc')
-    form.append('size', buffer.length.toString())
-    form.append('name', collabId)
-    form.append('id', id)
-    form.append('data', new Blob([buffer])) // ?
-
-    await this.fileUploader(id, form)
-
-    return collabId
+  private async getNextIssueIdentifier (project: Project): Promise<{ number: number, identifier: string }> {
+    const incResult = await this.client.updateDoc(
+      tracker.class.Project,
+      core.space.Space,
+      project._id,
+      { $inc: { sequence: 1 } },
+      true
+    )
+    const number = (incResult as any).object.sequence
+    const identifier = `${project.identifier}-${number}`
+    return { number, identifier }
   }
 
-  async importComment (issueId: Ref<Issue>, comment: ImportComment, projectId: Ref<Project>): Promise<void> {
+  private async getIssueKind (project: Project): Promise<TaskType> {
+    const taskKind = project?.type !== undefined ? { parent: project.type } : {}
+    const kind = await this.client.findOne(task.class.TaskType, taskKind)
+    if (kind === undefined) {
+      throw new Error(`Task type not found for project: ${project._id}`)
+    }
+    return kind
+  }
+
+  private async getIssueRank (project: Project): Promise<string> {
+    const lastIssue = await this.client.findOne<Issue>(
+      tracker.class.Issue,
+      { space: project._id },
+      { sort: { rank: SortingOrder.Descending } }
+    )
+    return makeRank(lastIssue?.rank, undefined)
+  }
+
+  private async importComments (issueId: Ref<Issue>, comments: ImportComment[], projectId: Ref<Project>): Promise<void> {
+    const sortedComments = comments.sort((a, b) => {
+      const now = Date.now()
+      return (a.date ?? now) - (b.date ?? now)
+    })
+    for (const comment of sortedComments) {
+      await this.createComment(issueId, comment, projectId)
+    }
+  }
+
+  async createComment (issueId: Ref<Issue>, comment: ImportComment, projectId: Ref<Project>): Promise<void> {
     const json = parseMessageMarkdown(comment.text ?? '', 'image://')
     const processedJson = this.preprocessor.process(json)
     const markup = jsonToMarkup(processedJson)
@@ -487,48 +486,110 @@ export class WorkspaceImporter {
     )
 
     if (comment.attachments !== undefined) {
-      for (const attach of comment.attachments) {
-        const blob = await attach.blobProvider()
-        if (blob === null) continue
+      await this.importAttachments(commentId, comment.attachments, projectId)
+    }
+  }
 
-        const file = new File([blob], attach.title)
+  private async importAttachments (
+    commentId: Ref<ChatMessage>,
+    attachments: ImportAttachment[],
+    projectId: Ref<Project>
+  ): Promise<void> {
+    for (const attach of attachments) {
+      const blob = await attach.blobProvider()
+      if (blob === null) {
+        console.warn('Failed to download attachment file: ', attach.title)
+        continue
+      }
 
-        const form = new FormData()
-        form.append('file', file)
-        form.append('type', file.type)
-        form.append('size', file.size.toString())
-        form.append('name', attach.title)
-        const attachmentId = generateId<Attachment>()
-        form.append('id', attachmentId)
-        form.append('data', blob) // ?
-
-        const res = await this.fileUploader(attachmentId, form)
-        if (res.status === 200) {
-          const uuid = await res.text()
-          // as [
-          //   {
-          //     key: 'file',
-          //     id: uuid
-          //   }
-          // ]
-          await this.client.addCollection(
-            attachment.class.Attachment,
-            projectId,
-            commentId,
-            chunter.class.ChatMessage,
-            'attachments',
-            {
-              file: JSON.parse(uuid)[0].id,
-              lastModified: Date.now(),
-              name: file.name,
-              size: file.size,
-              type: file.type
-            },
-            attachmentId
-          )
-        }
+      const attachmentId = await this.createAttachment(blob, attach, projectId, commentId)
+      if (attachmentId === null) {
+        console.warn('Failed to upload attachment file: ', attach.title)
       }
     }
+  }
+
+  private async createAttachment (
+    blob: Blob,
+    attach: ImportAttachment,
+    projectId: Ref<Project>,
+    commentId: Ref<ChatMessage>
+  ): Promise<Ref<Attachment> | null> {
+    const attachmentId = generateId<Attachment>()
+    const file = new File([blob], attach.title)
+
+    const response = await this.uploadFile(attachmentId, attach.title, file)
+    if (response.status === 200) {
+      const responseText = await response.text()
+      if (responseText !== undefined) {
+        const uploadResult = JSON.parse(responseText) as UploadResult[]
+        if (!Array.isArray(uploadResult) || uploadResult.length === 0) {
+          return null
+        }
+
+        await this.client.addCollection(
+          attachment.class.Attachment,
+          projectId,
+          commentId,
+          chunter.class.ChatMessage,
+          'attachments',
+          {
+            file: uploadResult[0].id,
+            lastModified: Date.now(),
+            name: file.name,
+            size: file.size,
+            type: file.type
+          },
+          attachmentId
+        )
+      }
+    }
+    return attachmentId
+  }
+
+  // Collaborative content handling
+  private async createCollaborativeContent (
+    id: Ref<Doc>,
+    field: string,
+    content: string
+  ): Promise<CollaborativeDoc> {
+    const json = parseMessageMarkdown(content ?? '', 'image://')
+    const processedJson = this.preprocessor.process(json)
+    const collabId = makeCollaborativeDoc(id, 'description')
+
+    const yDoc = jsonToYDocNoSchema(processedJson, field)
+    const buffer = yDocToBuffer(yDoc)
+
+    await this.uploadCollaborativeDoc(id, collabId, buffer)
+    return collabId
+  }
+
+  private async uploadCollaborativeDoc (
+    id: Ref<Doc>,
+    collabId: CollaborativeDoc,
+    data: Buffer
+  ): Promise<Response> {
+    const file = new File([data], collabId)
+    const { documentId } = collaborativeDocParse(collabId)
+    return await this.uploadFile(id, documentId, file, 'application/ydoc')
+  }
+
+  // todo: move to fileUploader
+  private async uploadFile (
+    id: Ref<Doc>,
+    name: string,
+    file: File,
+    contentType?: string
+  ): Promise<Response> {
+    const form = new FormData()
+    form.append('file', file, name)
+    form.append('type', contentType ?? file.type)
+    form.append('size', file.size.toString()) // todo: file.size
+    form.append('name', file.name)
+    form.append('id', id)
+    form.append('data', new Blob([file])) // todo: test new Blob([blob])
+
+    return await this.fileUploader(id, form)
   }
 
   async findIssueStatusByName (name: string): Promise<Ref<IssueStatus>> {
