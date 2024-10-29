@@ -87,7 +87,7 @@ export function importTool (): void {
     await connection.close()
   }
 
-  // import-notion-with-teamspaces /home/anna/work/notion/pages/exported --workspace workspace
+  // import-notion-with-teamspaces /home/anna/work/notion/pages/exported --workspace ws1 --user user1 --password 1234
   program
     .command('import-notion-with-teamspaces <dir>')
     .description('import extracted archive exported from Notion as "Markdown & CSV"')
@@ -101,7 +101,7 @@ export function importTool (): void {
       })
     })
 
-  // import-notion-to-teamspace /home/anna/work/notion/pages/exported --workspace workspace --teamspace notion
+  // import-notion-to-teamspace /home/anna/work/notion/pages/exported --workspace ws1 --teamspace notion --user user1 --password 1234
   program
     .command('import-notion-to-teamspace <dir>')
     .description('import extracted archive exported from Notion as "Markdown & CSV"')
@@ -116,19 +116,18 @@ export function importTool (): void {
       })
     })
 
-  // import-notion-to-teamspace /home/anna/work/notion/pages/exported --workspace workspace --teamspace notion
+  // import-clickup-tasks /home/anna/work/clickup/aleksandr/debug/tasks.csv --workspace ws1 --user user1 --password 1234
   program
-    .command('import-clickup <dir>')
+    .command('import-clickup-tasks <file>')
     .description('import extracted archive exported from Notion as "Markdown & CSV"')
     .requiredOption('-u, --user <user>', 'user')
     .requiredOption('-pw, --password <password>', 'password')
     .requiredOption('-ws, --workspace <workspace>', 'workspace url where the documents should be imported to')
-    .requiredOption('-ts, --teamspace <teamspace>', 'new teamspace name where the documents should be imported to')
-    .action(async (dir: string, cmd) => {
-      const { workspace, user, password, teamspace } = cmd
+    .action(async (file: string, cmd) => {
+      const { workspace, user, password } = cmd
       await authorize(user, password, workspace, async (client, uploader) => {
         const importer = new ClickupImporter(client, uploader)
-        await importer.importClickUp(dir, teamspace)
+        await importer.importClickUpTasks(file)
       })
     })
 

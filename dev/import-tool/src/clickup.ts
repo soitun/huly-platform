@@ -2,18 +2,16 @@ import contact, { type Person, type PersonAccount } from '@hcengineering/contact
 import { type Ref, type Timestamp, type TxOperations } from '@hcengineering/core'
 import { MarkupNodeType, traverseNode, type MarkupNode } from '@hcengineering/text'
 import csv from 'csvtojson'
-import { readdir, readFile } from 'fs/promises'
-import { join, parse } from 'path'
+import { readFile } from 'fs/promises'
+import { parse } from 'path'
 import { download } from './importer/dowloader'
 import {
   WorkspaceImporter,
   type ImportComment,
   type ImportDocument,
   type ImportIssue,
-  type ImportPerson,
   type ImportProject,
   type ImportProjectType,
-  type ImportTeamspace,
   type MarkdownPreprocessor
 } from './importer/importer'
 import { type FileUploader } from './importer/uploader'
@@ -139,38 +137,15 @@ class ClickupImporter {
     private readonly fileUploader: FileUploader
   ) {}
 
-  async importClickUp (dir: string, teamspaceName: string): Promise<void> {
-    const files = await readdir(dir, { recursive: true })
-    console.log(files)
-
-    const persons: ImportPerson[] = []
+  async importClickUpTasks (file: string): Promise<void> {
     const projectTypes: ImportProjectType[] = []
-    const projects: ImportProject[] = []
-    const teamspace: ImportTeamspace = {
-      class: 'document.class.TeamSpace',
-      name: teamspaceName,
-      docs: []
-    }
+    const spaces: ImportProject[] = []
 
-    for (const file of files) {
-      const parsedFileName = parse(file)
-      const extension = parsedFileName.ext.toLowerCase()
-      const fullPath = join(dir, file)
-      if (extension === '.md') {
-        console.log('Found Wiki Document: ', fullPath)
-        teamspace.docs.push(this.processClickupWiki(fullPath))
-      } else if (extension === '.csv') {
-        console.log('Found CSV Tasks: ', fullPath)
-        const projectsData = await this.processClickupTasks(fullPath)
-        projectTypes.push(projectsData.projectType)
-        projects.push(...projectsData.projects)
-      }
-    }
-
-    const spaces = teamspace.docs.length > 0 ? [...projects, teamspace] : projects
+    const projectsData = await this.processClickupTasks(file)
+    projectTypes.push(projectsData.projectType)
+    spaces.push(...projectsData.projects)
 
     const importData = {
-      persons,
       projectTypes,
       spaces
     }
@@ -180,20 +155,8 @@ class ClickupImporter {
     console.log('========================================')
     const postprocessor = new ClickupMarkdownPreprocessor(this.personsByName)
     await new WorkspaceImporter(this.client, this.fileUploader, importData, postprocessor).performImport()
-  }
-
-  private processClickupWiki (fullPath: string): ImportDocument {
-    return {
-      class: 'document.class.Document',
-      title: parse(fullPath).name,
-      descrProvider: async () => {
-        const description = await readFile(fullPath)
-        console.log(description.toString())
-        console.log(description.toString())
-        return description.toString()
-      },
-      subdocs: []
-    }
+    console.log('========================================')
+    console.log('IMPORT SUCCESS ')
   }
 
   private async processTasksCsv (file: string, process: (json: ClickupTask) => Promise<void> | void): Promise<void> {
@@ -388,6 +351,10 @@ class ClickupImporter {
     return content === 'null' ? '' : content.replaceAll('\\n', '\n')
   }
 
+  private millisecondsToHours (milliseconds: number): number {
+    return milliseconds / (1000 * 60 * 60)
+  }
+
   private getProjectIdentifier (projectName: string): string {
     return projectName.toUpperCase().replaceAll('-', '_').replaceAll(' ', '_').substring(0, 4)
   }
@@ -409,11 +376,6 @@ class ClickupImporter {
       ]
     }
   }
-
-  private millisecondsToHours (milliseconds: number): number {
-    return milliseconds / (1000 * 60 * 60)
-  }
 }
 
-// Export the class instead of the function
 export { ClickupImporter }
