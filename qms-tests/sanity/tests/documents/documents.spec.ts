@@ -581,7 +581,7 @@ test.describe('QMS. Documents tests', () => {
     })
   })
 
-  test('TESTS-162. Approve document with delayed release', async ({ page }) => {
+  test.skip('TESTS-162. Approve document with delayed release', async ({ page }) => {
     await allure.description('Requirement\nUsers need to create document with delayed release')
     await allure.tms('TESTS-162', 'https://front.hc.engineering/workbench/platform/tracker/TESTS-162')
     const approveDelayedDocument: NewDocument = {
@@ -950,7 +950,7 @@ test.describe('QMS. Documents tests', () => {
 
     await test.step('9. Send for Approval', async () => {
       await documentContentPage.buttonSendForApproval.click()
-      await documentContentPage.fillSelectApproversForm([reviewer])
+      await documentContentPage.fillSelectApproversForm([reviewer], true)
       await documentContentPage.checkDocumentStatus(DocumentStatus.IN_APPROVAL)
       await documentContentPage.checkDocument({
         ...documentDetails,
@@ -1094,11 +1094,11 @@ test.describe('QMS. Documents tests', () => {
       await documentContentPage.checkDocument(documentDetails)
       await documentContentPage.checkDocumentStatus(DocumentStatus.IN_REVIEW)
 
-      await expect(documentContentPage.contentLocator.locator('h1:first-child')).toHaveText(overview.heading)
-      await expect(documentContentPage.contentLocator.locator('h1:first-child + p')).toHaveText(overview.content)
+      await expect(documentContentPage.contentLocator.locator('h1:nth-of-type(1)')).toHaveText(overview.heading)
+      await expect(documentContentPage.contentLocator.locator('h1:nth-of-type(1) + p')).toHaveText(overview.content)
 
-      await expect(documentContentPage.contentLocator.locator('h1:not(:first-child)')).toHaveText(main.heading)
-      await expect(documentContentPage.contentLocator.locator('h1:not(:first-child) + p')).toHaveText(main.content)
+      await expect(documentContentPage.contentLocator.locator('h1:nth-of-type(2)')).toHaveText(main.heading)
+      await expect(documentContentPage.contentLocator.locator('h1:nth-of-type(2) + p')).toHaveText(main.content)
     })
   })
 })

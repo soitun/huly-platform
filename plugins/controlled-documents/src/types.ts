@@ -194,7 +194,8 @@ export enum DocumentState {
   Draft = 'draft',
   Effective = 'effective',
   Archived = 'archived',
-  Deleted = 'deleted'
+  Deleted = 'deleted',
+  Obsolete = 'obsolete'
 }
 
 /**
@@ -238,15 +239,6 @@ export enum ControlledDocumentState {
   Approved = 'approved',
   Rejected = 'rejected',
   ToReview = 'toReview'
-}
-
-/**
- * @public
- * Generic sequence attached to a class for cases when a single increment goes through all instances of the class.
- */
-export interface Sequence extends Doc {
-  attachedTo: Ref<Class<Doc>>
-  sequence: number
 }
 
 /**

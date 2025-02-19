@@ -19,13 +19,12 @@ import { driveId } from '@hcengineering/drive'
 import drive from '@hcengineering/drive-resources/src/plugin'
 import { type ObjectSearchCategory, type ObjectSearchFactory } from '@hcengineering/model-presentation'
 import { type IntlString, type Resource, mergeIds } from '@hcengineering/platform'
-import { type AnyComponent, type Location } from '@hcengineering/ui'
+import { type AnyComponent, type Location } from '@hcengineering/ui/src/types'
 import {
   type Action,
   type ActionCategory,
   type ViewAction,
   type ViewActionAvailabilityFunction,
-  type ViewQueryAction,
   type Viewlet,
   type ViewletDescriptor
 } from '@hcengineering/view'
@@ -56,7 +55,7 @@ export default mergeIds(driveId, drive, {
     FileLinkProvider: '' as Resource<(doc: Doc, props: Record<string, any>) => Promise<Location>>,
     CanRenameFile: '' as Resource<ViewActionAvailabilityFunction>,
     CanRenameFolder: '' as Resource<ViewActionAvailabilityFunction>,
-    HideArchivedDrives: '' as ViewQueryAction
+    CanDeleteFileVersion: '' as Resource<ViewActionAvailabilityFunction>
   },
   completion: {
     FileQuery: '' as Resource<ObjectSearchFactory>,
@@ -80,6 +79,7 @@ export default mergeIds(driveId, drive, {
     DownloadFile: '' as Ref<Action>,
     RenameFile: '' as Ref<Action>,
     RenameFolder: '' as Ref<Action>,
+    DeleteFileVersion: '' as Ref<Action>,
     RestoreFileVersion: '' as Ref<Action>
   },
   actionImpl: {

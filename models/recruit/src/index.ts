@@ -332,7 +332,9 @@ export function createModel (builder: Builder): void {
     key: 'hideArchived',
     type: 'toggle',
     defaultValue: true,
-    label: recruit.string.HideArchivedVacancies
+    actionTarget: 'options',
+    action: view.function.HideArchived,
+    label: view.string.HideArchived
   }
 
   builder.createDoc(
@@ -433,6 +435,12 @@ export function createModel (builder: Builder): void {
       configOptions: {
         hiddenKeys: ['name', 'attachedTo'],
         sortable: true
+      },
+      viewOptions: {
+        groupBy: [],
+        orderBy: [],
+        other: [vacancyHideArchivedOption],
+        storageKey: 'vacancyViewOptions'
       }
     },
     recruit.viewlet.TableApplicant
@@ -452,8 +460,8 @@ export function createModel (builder: Builder): void {
     key: 'hideArchivedVacancies',
     type: 'toggle',
     defaultValue: true,
-    actionTarget: 'query',
-    action: recruit.function.HideArchivedVacancies,
+    actionTarget: 'options',
+    action: view.function.HideArchived,
     label: recruit.string.HideApplicantsFromArchivedVacancies
   }
 
@@ -524,8 +532,7 @@ export function createModel (builder: Builder): void {
         }
       },
       baseQuery: {
-        isDone: false,
-        '$lookup.space.archived': false
+        isDone: false
       }
     },
     recruit.viewlet.TableApplicantMatch
@@ -561,7 +568,8 @@ export function createModel (builder: Builder): void {
           actionTarget: 'category',
           action: view.function.ShowEmptyGroups,
           label: view.string.ShowEmptyGroups
-        }
+        },
+        vacancyHideArchivedOption
       ],
       storageKey: 'applicantViewOptions'
     }
@@ -585,6 +593,13 @@ export function createModel (builder: Builder): void {
         {
           key: 'status',
           props: { kind: 'list', size: 'small', shouldShowName: false }
+        },
+        {
+          key: 'kind',
+          label: task.string.TaskType,
+          presenter: task.component.TaskTypeListPresenter,
+          props: { kind: 'list', size: 'small', justify: 'center' },
+          displayProps: { key: 'applicant_kind' }
         },
         {
           key: '$lookup.attachedTo',
@@ -776,9 +791,6 @@ export function createModel (builder: Builder): void {
       configOptions: {
         strict: true,
         hiddenKeys: ['name', 'space', 'modifiedOn']
-      },
-      baseQuery: {
-        '$lookup.space.archived': false
       },
       viewOptions: {
         groupBy: ['company', 'dueTo', 'createdBy'],

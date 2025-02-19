@@ -8,16 +8,21 @@ import core, {
   makeCollabId,
   MeasureContext,
   Mixin,
+  parseSocialIdString,
+  type PersonId,
+  type PersonInfo,
   Ref,
+  SocialIdType,
   Space,
   TxOperations,
-  WorkspaceIdWithUrl
+  type WorkspaceIds
 } from '@hcengineering/core'
 import { ModelLogger } from '@hcengineering/model'
 import { makeRank } from '@hcengineering/rank'
 import { StorageFileUploader, UnifiedFormatImporter } from '@hcengineering/importer'
 import type { StorageAdapter } from '@hcengineering/server-core'
 import { jsonToMarkup, parseMessageMarkdown } from '@hcengineering/text'
+import { pickPrimarySocialId } from '@hcengineering/contact'
 import { v4 as uuid } from 'uuid'
 import path from 'path'
 
@@ -95,21 +100,38 @@ export class WorkspaceInitializer {
   private readonly imageUrl = 'image://'
   private readonly nextRank = '#nextRank'
   private readonly now = '#now'
+  private readonly creatorPersonVar = 'creatorPerson'
+  private readonly socialKey: PersonId
+  private readonly socialType: SocialIdType
+  private readonly socialValue: string
 
   constructor (
     private readonly ctx: MeasureContext,
     private readonly storageAdapter: StorageAdapter,
-    private readonly wsUrl: WorkspaceIdWithUrl,
+    private readonly wsIds: WorkspaceIds,
     private readonly client: TxOperations,
-    private readonly initRepoDir: string
-  ) {}
+    private readonly initRepoDir: string,
+    private readonly creator: PersonInfo
+  ) {
+    this.socialKey = pickPrimarySocialId(creator.socialIds)
+    const socialKeyObj = parseSocialIdString(this.socialKey)
+    this.socialType = socialKeyObj.type
+    this.socialValue = socialKeyObj.value
+  }
 
   async processScript (
     script: InitScript,
     logger: ModelLogger,
     progress: (value: number) => Promise<void>
   ): Promise<void> {
-    const vars: Record<string, any> = {}
+    const vars: Record<string, any> = {
+      '${creatorName@global}': this.creator.name, // eslint-disable-line no-template-curly-in-string
+      '${creatorUuid@global}': this.creator.personUuid, // eslint-disable-line no-template-curly-in-string
+      '${creatorSocialKey@global}': this.socialKey, // eslint-disable-line no-template-curly-in-string
+      '${creatorSocialType@global}': this.socialType, // eslint-disable-line no-template-curly-in-string
+      '${creatorSocialValue@global}': this.socialValue // eslint-disable-line no-template-curly-in-string
+    }
+
     const defaults = new Map<Ref<Class<Doc>>, Props<Doc>>()
     for (let index = 0; index < script.steps.length; index++) {
       try {
@@ -151,7 +173,8 @@ export class WorkspaceInitializer {
       const id = uuid()
       const resp = await fetch(step.fromUrl)
       const buffer = Buffer.from(await resp.arrayBuffer())
-      await this.storageAdapter.put(this.ctx, this.wsUrl, id, buffer, step.contentType, buffer.length)
+
+      await this.storageAdapter.put(this.ctx, this.wsIds, id, buffer, step.contentType, buffer.length)
       if (step.resultVariable !== undefined) {
         vars[`\${${step.resultVariable}}`] = id
         vars[`\${${step.resultVariable}_size}`] = buffer.length
@@ -164,9 +187,11 @@ export class WorkspaceInitializer {
 
   private async processImport (step: ImportStep, vars: Record<string, any>, logger: ModelLogger): Promise<void> {
     try {
-      const uploader = new StorageFileUploader(this.ctx, this.storageAdapter, this.wsUrl)
+      const uploader = new StorageFileUploader(this.ctx, this.storageAdapter, this.wsIds)
       const initPath = path.resolve(this.initRepoDir, step.path)
-      const importer = new UnifiedFormatImporter(this.client, uploader, logger)
+      // eslint-disable-next-line no-template-curly-in-string
+      const initPerson = vars[`\${${this.creatorPersonVar}}`]
+      const importer = new UnifiedFormatImporter(this.client, uploader, logger, this.socialKey, initPerson)
       await importer.importFolder(initPath)
     } catch (error) {
       logger.error('Import failed', error)
@@ -298,7 +323,7 @@ export class WorkspaceInitializer {
     const json = parseMessageMarkdown(data ?? '', this.imageUrl)
     const markup = jsonToMarkup(json)
 
-    return await saveCollabJson(this.ctx, this.storageAdapter, this.wsUrl, doc, markup)
+    return await saveCollabJson(this.ctx, this.storageAdapter, this.wsIds, doc, markup)
   }
 
   private async fillProps<T extends Doc, P extends Partial<T> | Props<T>>(

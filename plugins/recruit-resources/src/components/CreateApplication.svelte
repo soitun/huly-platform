@@ -18,8 +18,7 @@
   import type { Contact, Employee, Person } from '@hcengineering/contact'
   import contact from '@hcengineering/contact'
   import { EmployeeBox, ExpandRightDouble, UserBox } from '@hcengineering/contact-resources'
-  import {
-    Account,
+  import core, {
     AccountRole,
     Class,
     Client,
@@ -99,7 +98,7 @@
     _id: generateId(),
     collection: 'applications',
     modifiedOn: Date.now(),
-    modifiedBy: '' as Ref<Account>,
+    modifiedBy: '',
     startDate: null,
     dueDate: null,
     kind: '' as Ref<TaskType>,
@@ -119,7 +118,7 @@
     if (selectedState === undefined) {
       throw new Error(`Please select initial state:${_space}`)
     }
-    const sequence = await client.findOne(task.class.Sequence, { attachedTo: recruit.class.Applicant })
+    const sequence = await client.findOne(core.class.Sequence, { attachedTo: recruit.class.Applicant })
     if (sequence === undefined) {
       throw new Error('sequence object not found')
     }
@@ -160,10 +159,7 @@
         status: selectedState._id,
         number,
         identifier: `APP-${number}`,
-        assignee: doc.assignee,
         rank: makeRank(lastOne?.rank, undefined),
-        startDate: null,
-        dueDate: null,
         kind
       },
       doc._id
@@ -220,10 +216,11 @@
   const spaceQuery = createQuery()
 
   let vacancy: Vacancy | undefined
-  const me = getCurrentAccount()._id
+  const acc = getCurrentAccount()
+  const socialIds = acc.socialIds
 
   $: if (_space) {
-    spaceQuery.query(recruit.class.Vacancy, { _id: _space, members: me }, (res) => {
+    spaceQuery.query(recruit.class.Vacancy, { _id: _space, members: { $in: socialIds } }, (res) => {
       vacancy = res.shift()
     })
   }
@@ -332,7 +329,7 @@
         _class={recruit.class.Vacancy}
         spaceQuery={{
           archived: false,
-          members: me,
+          members: { $in: socialIds },
           ...($selectedTypeStore !== undefined ? { type: $selectedTypeStore } : {})
         }}
         spaceOptions={orgOptions}
@@ -430,7 +427,7 @@
         <InlineAttributeBar
           _class={recruit.class.Applicant}
           object={doc}
-          toClass={task.class.Task}
+          toClass={core.class.AttachedDoc}
           ignoreKeys={['assignee', 'status']}
           extraProps={{ showNavigate: false, space: vacancy._id }}
         />

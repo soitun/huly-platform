@@ -14,6 +14,7 @@
 // limitations under the License.
 -->
 <script lang="ts">
+  import contact, { PermissionsStore } from '@hcengineering/contact'
   import type { Attachment } from '@hcengineering/attachment'
   import core, { type WithLookup } from '@hcengineering/core'
   import presentation, {
@@ -25,10 +26,11 @@
     sizeToWidth
   } from '@hcengineering/presentation'
   import { Label, Spinner } from '@hcengineering/ui'
-  import { permissionsStore } from '@hcengineering/view-resources'
   import WebIcon from './icons/Web.svelte'
   import filesize from 'filesize'
-  import { createEventDispatcher } from 'svelte'
+  import { createEventDispatcher, onMount } from 'svelte'
+  import { getResource } from '@hcengineering/platform'
+  import { Readable } from 'svelte/store'
   import { getType, openAttachmentInSidebar, showAttachmentPreviewPopup } from '../utils'
   import AttachmentName from './AttachmentName.svelte'
 
@@ -38,6 +40,11 @@
   export let preview = false
 
   const dispatch = createEventDispatcher()
+  let permissionsStore: Readable<PermissionsStore>
+
+  onMount(async () => {
+    permissionsStore = await getResource(contact.store.Permissions)
+  })
 
   const maxLength: number = 30
 
@@ -48,6 +55,7 @@
     removable &&
     value !== undefined &&
     value.readonly !== true &&
+    permissionsStore != null &&
     ($permissionsStore.whitelist.has(value.space) ||
       !$permissionsStore.ps[value.space]?.has(core.permission.ForbidDeleteObject))
 
@@ -115,45 +123,49 @@
         {#await getJsonOrEmpty(value.file, value.name)}
           <Spinner size="small" />
         {:then linkPreviewDetails}
-          <div class="flex-center icon">
-            {#if linkPreviewDetails.icon !== undefined && !useDefaultIcon}
-              <img
-                src={linkPreviewDetails.icon}
-                class="link-preview-icon"
-                alt="link-preview"
-                on:error={() => {
-                  useDefaultIcon = true
-                }}
-              />
-            {:else}
-              <WebIcon size="medium" />
-            {/if}
-          </div>
-          <div class="flex-col info-container">
-            <div class="name">
-              <a target="_blank" class="no-line" style:flex-shrink={0} href={linkPreviewDetails.url}
-                >{trimFilename(linkPreviewDetails?.title ?? value.name)}</a
-              >
-            </div>
-            <div class="info-content flex-row-center">
-              <span class="actions inline-flex clear-mins gap-1">
-                {#if linkPreviewDetails.description}
-                  {trimFilename(linkPreviewDetails.description)}
-                  <span>•</span>
-                {/if}
-                <span
-                  class="remove-link"
-                  on:click={(ev) => {
-                    ev.stopPropagation()
-                    ev.preventDefault()
-                    dispatch('remove', value)
+          {#if linkPreviewDetails !== undefined}
+            <div class="flex-center icon image">
+              {#if linkPreviewDetails.icon !== undefined && !useDefaultIcon}
+                <img
+                  src={linkPreviewDetails.icon}
+                  class="link-preview-icon"
+                  alt="link-preview"
+                  on:error={() => {
+                    useDefaultIcon = true
                   }}
-                >
-                  <Label label={presentation.string.Delete} />
-                </span>
-              </span>
+                />
+              {:else}
+                <WebIcon size="medium" />
+              {/if}
             </div>
-          </div>
+            <div class="flex-col info-container">
+              <div class="name">
+                <a target="_blank" class="no-line" style:flex-shrink={0} href={linkPreviewDetails.url}
+                  >{trimFilename(linkPreviewDetails?.title ?? value.name)}</a
+                >
+              </div>
+              <div class="info-content flex-row-center">
+                <span class="actions inline-flex clear-mins gap-1">
+                  {#if linkPreviewDetails.description}
+                    {trimFilename(linkPreviewDetails.description)}
+                    <span>•</span>
+                  {/if}
+                  <!-- svelte-ignore a11y-click-events-have-key-events -->
+                  <!-- svelte-ignore a11y-no-static-element-interactions -->
+                  <span
+                    class="remove-link"
+                    on:click={(ev) => {
+                      ev.stopPropagation()
+                      ev.preventDefault()
+                      dispatch('remove', value)
+                    }}
+                  >
+                    <Label label={presentation.string.Delete} />
+                  </span>
+                </span>
+              </div>
+            </div>
+          {/if}
         {/await}
       {:else}
         {#await getBlobRef(value.file, value.name, sizeToWidth('large')) then valueRef}

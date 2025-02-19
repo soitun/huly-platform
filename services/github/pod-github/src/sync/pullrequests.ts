@@ -1,7 +1,8 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import { Analytics } from '@hcengineering/analytics'
-import { Person, PersonAccount } from '@hcengineering/contact'
+import { Person } from '@hcengineering/contact'
 import core, {
-  Account,
+  PersonId,
   AttachedData,
   Doc,
   DocumentUpdate,
@@ -93,20 +94,22 @@ export class PullRequestSyncManager extends IssueSyncManagerBase implements DocS
       action: _event.action,
       login: _event.sender.login,
       type: _event.sender.type,
-      workspace: this.provider.getWorkspaceId().name
+      workspace: this.provider.getWorkspaceId()
     })
 
     const projectV2Event = (_event as any as ProjectsV2ItemEvent).projects_v2_item?.id !== undefined
     if (projectV2Event) {
       const projectV2Event = _event as ProjectsV2ItemEvent
 
-      const githubProjects = await this.provider.liveQuery.queryFind(github.mixin.GithubProject, {})
+      const githubProjects = await this.provider.liveQuery.findAll(github.mixin.GithubProject, {
+        archived: false
+      })
       let prj = githubProjects.find((it) => it.projectNodeId === projectV2Event.projects_v2_item.project_node_id)
       if (prj === undefined) {
         // Checking for milestones
-        const m = (await this.provider.liveQuery.queryFind(github.mixin.GithubMilestone, {})).find(
-          (it) => it.projectNodeId === projectV2Event.projects_v2_item.project_node_id
-        )
+        const m = await this.provider.liveQuery.findOne(github.mixin.GithubMilestone, {
+          projectNodeId: projectV2Event.projects_v2_item.project_node_id
+        })
         if (m !== undefined) {
           prj = githubProjects.find((it) => it._id === m.space)
         }
@@ -115,7 +118,7 @@ export class PullRequestSyncManager extends IssueSyncManagerBase implements DocS
       if (prj === undefined) {
         this.ctx.info('Event from unknown v2 project', {
           nodeId: projectV2Event.projects_v2_item.project_node_id,
-          workspace: this.provider.getWorkspaceId().name
+          workspace: this.provider.getWorkspaceId()
         })
         return
       }
@@ -132,7 +135,7 @@ export class PullRequestSyncManager extends IssueSyncManagerBase implements DocS
       if (project === undefined || repository === undefined) {
         this.ctx.info('No project for repository', {
           name: event.repository.name,
-          workspace: this.provider.getWorkspaceId().name
+          workspace: this.provider.getWorkspaceId()
         })
         return
       }
@@ -319,33 +322,33 @@ export class PullRequestSyncManager extends IssueSyncManagerBase implements DocS
     }
   }
 
-  async getReviewers (issue: PullRequestExternalData): Promise<PersonAccount[]> {
-    // Find Assignees and reviewers
-    const ids: UserInfo[] = issue.reviewRequests.nodes.map((it: any) => it.requestedReviewer)
+  // async getReviewers (issue: PullRequestExternalData): Promise<PersonAccount[]> {
+  //   // Find Assignees and reviewers
+  //   const ids: UserInfo[] = issue.reviewRequests.nodes.map((it: any) => it.requestedReviewer)
 
-    const values: PersonAccount[] = []
+  //   const values: PersonAccount[] = []
 
-    for (const o of ids) {
-      const acc = await this.provider.getAccount(o)
-      if (acc !== undefined) {
-        values.push(acc)
-      }
-    }
+  //   for (const o of ids) {
+  //     const acc = await this.provider.getAccount(o)
+  //     if (acc !== undefined) {
+  //       values.push(acc)
+  //     }
+  //   }
 
-    for (const n of issue.latestReviews.nodes) {
-      const acc = await this.provider.getAccount(n.author)
-      if (acc !== undefined) {
-        values.push(acc)
-      }
-    }
-    return values
-  }
+  //   for (const n of issue.latestReviews.nodes) {
+  //     const acc = await this.provider.getAccount(n.author)
+  //     if (acc !== undefined) {
+  //       values.push(acc)
+  //     }
+  //   }
+  //   return values
+  // }
 
   private async createSyncData (
     pullRequestExternal: PullRequestExternalData,
     derivedClient: TxOperations,
     repo: GithubIntegrationRepository,
-    account: Ref<Account>
+    account: PersonId
   ): Promise<void> {
     const lastModified = new Date(pullRequestExternal.updatedAt).getTime()
     await derivedClient.createDoc(github.class.DocSyncInfo, repo.githubProject as Ref<GithubProject>, {
@@ -387,7 +390,7 @@ export class PullRequestSyncManager extends IssueSyncManagerBase implements DocS
     // A target node id
     const targetNodeId: string | undefined = info.targetNodeId as string
 
-    const okit = (await this.provider.getOctokit(account as Ref<PersonAccount>)) ?? container.container.octokit
+    const okit = (await this.provider.getOctokit(account as PersonId)) ?? container.container.octokit
 
     const isProjectProjectTarget = target.target.projectNodeId === target.project.projectNodeId
     const supportProjects =
@@ -445,7 +448,8 @@ export class PullRequestSyncManager extends IssueSyncManagerBase implements DocS
     }
 
     const assignees = await this.getAssignees(pullRequestExternal)
-    const reviewers = await this.getReviewers(pullRequestExternal)
+    // TODO: FIXME
+    const reviewers: any = [] // await this.getReviewers(pullRequestExternal)
 
     const latestReviews: LastReviewState[] = []
 
@@ -462,7 +466,7 @@ export class PullRequestSyncManager extends IssueSyncManagerBase implements DocS
       title: pullRequestExternal.title,
       description: await this.provider.getMarkup(container.container, pullRequestExternal.body, this.stripGuestLink),
       assignee: assignees[0]?.person ?? null,
-      reviewers: reviewers.map((it) => it.person),
+      reviewers: reviewers.map((it: any) => it.person),
       draft: pullRequestExternal.isDraft,
       head: pullRequestExternal.headRef,
       base: pullRequestExternal.baseRef,
@@ -632,7 +636,7 @@ export class PullRequestSyncManager extends IssueSyncManagerBase implements DocS
     }
   }
 
-  async afterSync (existing: Issue, account: Ref<Account>, issueExternal: any, info: DocSyncInfo): Promise<void> {
+  async afterSync (existing: Issue, account: PersonId, issueExternal: any, info: DocSyncInfo): Promise<void> {
     const pullRequest = existing as GithubPullRequest
     await this.todoSync(this.client, pullRequest, issueExternal as PullRequestExternalData, info, account)
   }
@@ -645,7 +649,7 @@ export class PullRequestSyncManager extends IssueSyncManagerBase implements DocS
     >,
     external: PullRequestExternalData,
     info: DocSyncInfo,
-    account: Ref<Account>
+    account: PersonId
   ): Promise<void> {
     // Find all todo's related to PR.
     const allTodos = await client.findAll<GithubTodo>(github.mixin.GithubTodo, { attachedTo: pullRequest._id })
@@ -824,7 +828,7 @@ export class PullRequestSyncManager extends IssueSyncManagerBase implements DocS
     pullRequest: Pick<GithubPullRequest, '_id' | 'identifier' | 'space' | '_class' | 'reviewers' | 'title' | 'state'>,
     external: PullRequestExternalData,
     todoUser: Ref<Person>,
-    account: Ref<Account>
+    account: PersonId
   ): Promise<void> {
     const latestTodo = await client.findOne(
       time.class.ToDo,
@@ -877,7 +881,7 @@ export class PullRequestSyncManager extends IssueSyncManagerBase implements DocS
     >,
     external: PullRequestExternalData,
     todoUser: Ref<Person>,
-    account: Ref<Account>
+    account: PersonId
   ): Promise<void> {
     const latestTodo = await client.findOne(
       time.class.ToDo,
@@ -1009,7 +1013,7 @@ export class PullRequestSyncManager extends IssueSyncManagerBase implements DocS
     container: ContainerFocus,
     issueExternal: IssueExternalData,
     okit: Octokit,
-    account: Ref<Account>
+    account: PersonId
   ): Promise<boolean> {
     let { state, stateReason, body, ...issueUpdate } = await this.collectIssueUpdate(
       info,
@@ -1027,8 +1031,7 @@ export class PullRequestSyncManager extends IssueSyncManagerBase implements DocS
     }
 
     const hasFieldsUpdate = Object.keys(issueUpdate).length > 0 || state !== undefined
-    const isLocked =
-      info.isDescriptionLocked === true && !(await this.provider.isPlatformUser(account as Ref<PersonAccount>))
+    const isLocked = info.isDescriptionLocked === true && !(await this.provider.isPlatformUser(account))
 
     if (hasFieldsUpdate || body !== undefined) {
       if (body !== undefined && !isLocked) {
@@ -1040,7 +1043,7 @@ export class PullRequestSyncManager extends IssueSyncManagerBase implements DocS
               url: issueExternal.url,
               ...issueUpdate,
               body,
-              workspace: this.provider.getWorkspaceId().name
+              workspace: this.provider.getWorkspaceId()
             })
             if (isGHWriteAllowed()) {
               await okit?.graphql(
@@ -1070,7 +1073,7 @@ export class PullRequestSyncManager extends IssueSyncManagerBase implements DocS
           this.ctx.info('update-fields', {
             url: issueExternal.url,
             ...issueUpdate,
-            workspace: this.provider.getWorkspaceId().name
+            workspace: this.provider.getWorkspaceId()
           })
           if (isGHWriteAllowed()) {
             await okit?.graphql(
@@ -1103,7 +1106,7 @@ export class PullRequestSyncManager extends IssueSyncManagerBase implements DocS
     pullRequestExternal: PullRequestExternalData,
     existingPR: Pick<GithubPullRequest, '_id' | 'space' | '_class'>,
     lastModified: number,
-    account: Ref<Account>
+    account: PersonId
   ): Promise<void> {
     const repo = await this.provider.getRepositoryById(info.repository)
     if (repo?.nodeId === undefined) {
@@ -1154,7 +1157,7 @@ export class PullRequestSyncManager extends IssueSyncManagerBase implements DocS
   private async createPullRequest (
     client: TxOperations,
     info: DocSyncInfo,
-    account: Ref<Account>,
+    account: PersonId,
     pullRequestData: GithubPullRequestData & { status: Issue['status'] },
     pullRequestExternal: PullRequestExternalData,
     repo: Ref<GithubIntegrationRepository>,
@@ -1373,7 +1376,7 @@ export class PullRequestSyncManager extends IssueSyncManagerBase implements DocS
           if (issues.some((issue) => issue.url === undefined && Object.keys(issue).length === 0)) {
             this.ctx.error('empty document content updates', {
               repo: repo.name,
-              workspace: this.provider.getWorkspaceId().name,
+              workspace: this.provider.getWorkspaceId(),
               data: cutObjectArray(response)
             })
           }
@@ -1385,7 +1388,7 @@ export class PullRequestSyncManager extends IssueSyncManagerBase implements DocS
             this.ctx.warn('pull request external retrieval switch to one by one mode', {
               errors: err.errors,
               msg: err.message,
-              workspace: this.provider.getWorkspaceId().name
+              workspace: this.provider.getWorkspaceId()
             })
           } else if (partsize === 1) {
             // We need to update issue, since it is missing on external side.
@@ -1395,7 +1398,7 @@ export class PullRequestSyncManager extends IssueSyncManagerBase implements DocS
                 errors: err.errors,
                 msg: err.message,
                 url: syncDoc.url,
-                workspace: this.provider.getWorkspaceId().name
+                workspace: this.provider.getWorkspaceId()
               })
               await derivedClient.diffUpdate(
                 syncDoc,
@@ -1465,7 +1468,7 @@ export class PullRequestSyncManager extends IssueSyncManagerBase implements DocS
       this.ctx.info('sync external pull requests', {
         repo: repo.name,
         since,
-        workspace: this.provider.getWorkspaceId().name,
+        workspace: this.provider.getWorkspaceId(),
         state: 'OPEN'
       })
       await this.performPRSync(integration, repo, 'OPEN', undefined, derivedClient, prj)
@@ -1473,7 +1476,7 @@ export class PullRequestSyncManager extends IssueSyncManagerBase implements DocS
       this.ctx.info('sync external pull requests', {
         repo: repo.name,
         since,
-        workspace: this.provider.getWorkspaceId().name,
+        workspace: this.provider.getWorkspaceId(),
         state: 'CLOSED, MERGED'
       })
       await this.performPRSync(integration, repo, 'CLOSED, MERGED', since, derivedClient, prj)
@@ -1481,7 +1484,7 @@ export class PullRequestSyncManager extends IssueSyncManagerBase implements DocS
       this.ctx.info('sync external pull requests - done', {
         repo: repo.name,
         since,
-        workspace: this.provider.getWorkspaceId().name
+        workspace: this.provider.getWorkspaceId()
       })
 
       this.provider.sync()
@@ -1533,7 +1536,7 @@ export class PullRequestSyncManager extends IssueSyncManagerBase implements DocS
           repo: repo.name,
           since,
           len: issues.length,
-          workspace: this.provider.getWorkspaceId().name
+          workspace: this.provider.getWorkspaceId()
         })
 
         if (since !== undefined) {
@@ -1550,7 +1553,7 @@ export class PullRequestSyncManager extends IssueSyncManagerBase implements DocS
         if (emptyIndex !== -1) {
           this.ctx.error('empty document content', {
             repo: repo.name,
-            workspace: this.provider.getWorkspaceId().name,
+            workspace: this.provider.getWorkspaceId(),
             data: cutObjectArray(data),
             emptyIndex,
             el: JSON.stringify(issues[emptyIndex])
@@ -1591,7 +1594,7 @@ export class PullRequestSyncManager extends IssueSyncManagerBase implements DocS
     return { patch, contentType }
   }
 
-  async deleteGithubDocument (container: ContainerFocus, account: Ref<Account>, id: string): Promise<void> {
+  async deleteGithubDocument (container: ContainerFocus, account: PersonId, id: string): Promise<void> {
     // No delete is allowed for pull requests
   }
 }

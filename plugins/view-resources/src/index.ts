@@ -96,6 +96,9 @@ import TreeItem from './components/navigator/TreeItem.svelte'
 import TreeNode from './components/navigator/TreeNode.svelte'
 import StatusPresenter from './components/status/StatusPresenter.svelte'
 import StatusRefPresenter from './components/status/StatusRefPresenter.svelte'
+import PersonArrayEditor from './components/PersonArrayEditor.svelte'
+import PersonIdPresenter from './components/PersonIdPresenter.svelte'
+import PersonIdFilterValuePresenter from './components/filter/PersonIdFilterValuePresenter.svelte'
 import AudioViewer from './components/viewer/AudioViewer.svelte'
 import ImageViewer from './components/viewer/ImageViewer.svelte'
 import VideoViewer from './components/viewer/VideoViewer.svelte'
@@ -129,7 +132,7 @@ import {
 } from './filter'
 
 import { AggregationMiddleware, AnalyticsMiddleware } from './middleware'
-import { showEmptyGroups } from './viewOptions'
+import { hideArchived, showEmptyGroups } from './viewOptions'
 import {
   canArchiveSpace,
   canDeleteObject,
@@ -167,6 +170,8 @@ export { default as List } from './components/list/List.svelte'
 export { default as NavLink } from './components/navigator/NavLink.svelte'
 export { default as StatusPresenter } from './components/status/StatusPresenter.svelte'
 export { default as StatusRefPresenter } from './components/status/StatusRefPresenter.svelte'
+export { default as PersonIdPresenter } from './components/PersonIdPresenter.svelte'
+export { default as PersonIdFilterValuePresenter } from './components/filter/PersonIdFilterValuePresenter.svelte'
 export { default as FoldersBrowser } from './components/folders/FoldersBrowser.svelte'
 export { default as RelationsEditor } from './components/RelationsEditor.svelte'
 export { default as ListView } from './components/list/ListView.svelte'
@@ -176,6 +181,7 @@ export * from './middleware'
 export * from './selection'
 export * from './status'
 export * from './utils'
+export * from './icons'
 export * from './objectIterator'
 export {
   buildModel,
@@ -294,6 +300,9 @@ export default async (): Promise<Resources> => ({
     FileSizePresenter,
     StatusPresenter,
     StatusRefPresenter,
+    PersonArrayEditor,
+    PersonIdPresenter,
+    PersonIdFilterValuePresenter,
     DateFilterPresenter,
     StringFilterPresenter,
     AttachedDocPanel,
@@ -321,6 +330,7 @@ export default async (): Promise<Resources> => ({
     FilterContainsResult: containsResult,
     FilterNestedMatchResult: nestedMatchResult,
     FilterNestedDontMatchResult: nestedDontMatchResult,
+    HideArchived: hideArchived,
     ShowEmptyGroups: showEmptyGroups,
     FilterDateOutdated: dateOutdated,
     FilterDateToday: dateToday,

@@ -15,7 +15,7 @@
 //
 
 import {
-  Account,
+  PersonId,
   AggregateValue,
   AnyAttribute,
   CategoryType,
@@ -112,8 +112,8 @@ export interface FilteredView extends Doc {
   filterClass?: Ref<Class<Doc>>
   viewletId?: Ref<Viewlet> | null
   sharable?: boolean
-  users: Ref<Account>[]
-  createdBy: Ref<Account>
+  users: PersonId[]
+  createdBy: PersonId
   attachedTo: string
 }
 
@@ -541,7 +541,7 @@ export interface Action<T extends Doc = Doc, P = Record<string, any>> extends Do
 
   // Available only for workspace owners
   secured?: boolean
-  allowedForEditableContent?: boolean
+  allowedForEditableContent?: 'always' | 'noSelection'
 
   analyticsEvent?: string
 }
@@ -697,9 +697,25 @@ export interface ViewOption {
   defaultValue: any
   label: IntlString
   hidden?: (viewOptions: ViewOptions) => boolean
-  actionTarget?: 'query' | 'category' | 'display'
+  actionTarget?: 'query' | 'category' | 'display' | 'options'
   action?: Resource<(value: any, ...params: any) => any>
 }
+
+/**
+ * @public
+ */
+export type ViewOptionsAction<T extends Doc = Doc> = Resource<
+(value: any, query: FindOptions<T> | undefined) => FindOptions<T>
+>
+
+/**
+ * @public
+ */
+export interface ViewOptionsOption extends ViewOption {
+  actionTarget: 'options'
+  action: ViewOptionsAction<Doc>
+}
+
 /**
  * @public
  */

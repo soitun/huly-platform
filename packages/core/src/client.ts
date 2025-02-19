@@ -15,7 +15,7 @@
 
 import { Analytics } from '@hcengineering/analytics'
 import { BackupClient, DocChunk } from './backup'
-import { Account, Class, DOMAIN_MODEL, Doc, Domain, Ref, Timestamp } from './classes'
+import { Class, DOMAIN_MODEL, Doc, Domain, Ref, Timestamp } from './classes'
 import core from './component'
 import { Hierarchy } from './hierarchy'
 import { MeasureContext, MeasureMetricsContext } from './measurements'
@@ -43,13 +43,6 @@ export interface Client extends Storage, FulltextStorage {
     options?: FindOptions<T>
   ) => Promise<WithLookup<T> | undefined>
   close: () => Promise<void>
-}
-
-/**
- * @public
- */
-export interface AccountClient extends Client {
-  getAccount: () => Promise<Account>
 }
 
 /**
@@ -87,12 +80,11 @@ export interface ClientConnection extends Storage, FulltextStorage, BackupClient
 
   // If hash is passed, will return LoadModelResponse
   loadModel: (last: Timestamp, hash?: string) => Promise<Tx[] | LoadModelResponse>
-  getAccount: () => Promise<Account>
 
   getLastHash?: (ctx: MeasureContext) => Promise<string | undefined>
 }
 
-class ClientImpl implements AccountClient, BackupClient {
+class ClientImpl implements Client, BackupClient {
   notify?: (...tx: Tx[]) => void
   hierarchy!: Hierarchy
   model!: ModelDb
@@ -182,6 +174,10 @@ class ClientImpl implements AccountClient, BackupClient {
     return await this.conn.loadChunk(domain, idx)
   }
 
+  async getDomainHash (domain: Domain): Promise<string> {
+    return await this.conn.getDomainHash(domain)
+  }
+
   async closeChunk (idx: number): Promise<void> {
     await this.conn.closeChunk(idx)
   }
@@ -198,10 +194,6 @@ class ClientImpl implements AccountClient, BackupClient {
     await this.conn.clean(domain, docs)
   }
 
-  async getAccount (): Promise<Account> {
-    return await this.conn.getAccount()
-  }
-
   async sendForceClose (): Promise<void> {
     await this.conn.sendForceClose()
   }
@@ -215,7 +207,7 @@ export interface TxPersistenceStore {
   store: (model: LoadModelResponse) => Promise<void>
 }
 
-export type ModelFilter = (tx: Tx[]) => Promise<Tx[]>
+export type ModelFilter = (tx: Tx[]) => Tx[]
 
 /**
  * @public
@@ -226,7 +218,7 @@ export async function createClient (
   modelFilter?: ModelFilter,
   txPersistence?: TxPersistenceStore,
   _ctx?: MeasureContext
-): Promise<AccountClient> {
+): Promise<Client> {
   const ctx = _ctx ?? new MeasureMetricsContext('createClient', {})
   let client: ClientImpl | null = null
 
@@ -256,17 +248,21 @@ export async function createClient (
   }
   const conn = await ctx.with('connect', {}, () => connect(txHandler))
 
-  const { mode, current, addition } = await ctx.with('load-model', {}, (ctx) => loadModel(ctx, conn, txPersistence))
+  let { mode, current, addition } = await ctx.with('load-model', {}, (ctx) => loadModel(ctx, conn, txPersistence))
   switch (mode) {
     case 'same':
     case 'upgrade':
-      await ctx.with('build-model', {}, (ctx) => buildModel(ctx, current, modelFilter, hierarchy, model))
+      ctx.withSync('build-model', {}, (ctx) => {
+        buildModel(ctx, current, modelFilter, hierarchy, model)
+      })
       break
     case 'addition':
-      await ctx.with('build-model', {}, (ctx) =>
+      ctx.withSync('build-model', {}, (ctx) => {
         buildModel(ctx, current.concat(addition), modelFilter, hierarchy, model)
-      )
+      })
   }
+  current = []
+  addition = []
 
   txBuffer = txBuffer.filter((tx) => tx.space !== core.space.Model)
 
@@ -287,7 +283,7 @@ export async function createClient (
       return
     }
     // Find all new transactions and apply
-    const { mode, current, addition } = await ctx.with('load-model', {}, (ctx) => loadModel(ctx, conn, txPersistence))
+    let { mode, current, addition } = await ctx.with('load-model', {}, (ctx) => loadModel(ctx, conn, txPersistence))
 
     switch (mode) {
       case 'upgrade':
@@ -296,16 +292,21 @@ export async function createClient (
         model = new ModelDb(hierarchy)
         ;(client as ClientImpl).setModel(hierarchy, model)
 
-        await ctx.with('build-model', {}, (ctx) => buildModel(ctx, current, modelFilter, hierarchy, model))
+        ctx.withSync('build-model', {}, (ctx) => {
+          buildModel(ctx, current, modelFilter, hierarchy, model)
+        })
+        current = []
         await oldOnConnect?.(ClientConnectEvent.Upgraded, _lastTx, data)
         // No need to fetch more stuff since upgrade was happened.
         break
       case 'addition':
-        await ctx.with('build-model', {}, (ctx) =>
+        ctx.withSync('build-model', {}, (ctx) => {
           buildModel(ctx, current.concat(addition), modelFilter, hierarchy, model)
-        )
+        })
         break
     }
+    current = []
+    addition = []
 
     if (lastTx === undefined) {
       // No need to do anything here since we connected.
@@ -328,6 +329,7 @@ export async function createClient (
 }
 
 // Ignore Employee accounts.
+// We may still have them in transactions in old workspaces even with global accounts.
 function isPersonAccount (tx: Tx): boolean {
   return (
     (tx._class === core.class.TxCreateDoc ||
@@ -391,13 +393,13 @@ async function loadModel (
   return { mode: 'addition', current: current.transactions, addition: result.transactions }
 }
 
-async function buildModel (
+function buildModel (
   ctx: MeasureContext,
   transactions: Tx[],
   modelFilter: ModelFilter | undefined,
   hierarchy: Hierarchy,
   model: ModelDb
-): Promise<void> {
+): void {
   const systemTx: Tx[] = []
   const userTx: Tx[] = []
 
@@ -416,7 +418,7 @@ async function buildModel (
 
   let txes = systemTx.concat(userTx)
   if (modelFilter !== undefined) {
-    txes = await modelFilter(txes)
+    txes = modelFilter(txes)
   }
 
   ctx.withSync('build hierarchy', {}, () => {

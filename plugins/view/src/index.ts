@@ -16,7 +16,7 @@
 
 import { Class, Doc, DocumentQuery, FindOptions, Mixin, Ref } from '@hcengineering/core'
 import { Asset, IntlString, Plugin, Resource, plugin } from '@hcengineering/platform'
-import { AnyComponent, PopupAlignment, PopupPosAlignment } from '@hcengineering/ui'
+import { AnyComponent, PopupAlignment, PopupPosAlignment } from '@hcengineering/ui/src/types'
 import {
   Action,
   ActionCategory,
@@ -167,7 +167,8 @@ const view = plugin(viewId, {
     AttachedDocPanel: '' as AnyComponent,
     ObjectMention: '' as AnyComponent,
     SearchSelector: '' as AnyComponent,
-    FoldersBrowser: '' as AnyComponent
+    FoldersBrowser: '' as AnyComponent,
+    PersonIdPresenter: '' as AnyComponent
   },
   ids: {
     IconWithEmoji: '' as Asset
@@ -214,7 +215,9 @@ const view = plugin(viewId, {
     Leave: '' as IntlString,
     Copied: '' as IntlString,
     And: '' as IntlString,
-    Title: '' as IntlString
+    Title: '' as IntlString,
+    DeleteObject: '' as IntlString,
+    DeleteObjectConfirm: '' as IntlString
   },
   icon: {
     Table: '' as Asset,

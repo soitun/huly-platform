@@ -280,8 +280,12 @@ export { default as CodeForm } from './components/CodeForm.svelte'
 export { default as CodeInput } from './components/CodeInput.svelte'
 export { default as TimeLeft } from './components/TimeLeft.svelte'
 export { default as SectionEmpty } from './components/SectionEmpty.svelte'
+export { default as EmbeddedPDF } from './components/EmbeddedPDF.svelte'
+export { default as NestedMenu } from './components/NestedMenu.svelte'
+export { default as NestedDropdown } from './components/NestedDropdown.svelte'
 
 export { default as Dock } from './components/Dock.svelte'
+export { default as Image } from './components/Image.svelte'
 
 export * from './types'
 export * from './location'
@@ -320,12 +324,12 @@ export const deviceOptionsStore = writable<DeviceOptions>({
   isPortrait: false,
   isMobile: false,
   navigator: { visible: true, float: false, direction: 'vertical' },
-  aside: { visible: true, float: false },
   fontSize: 0,
   size: null,
   sizes: { xs: false, sm: false, md: false, lg: false, xl: false, xxl: false },
   minWidth: false,
-  twoRows: false
+  twoRows: false,
+  firstDayOfWeek: 1
 })
 
 export default uis

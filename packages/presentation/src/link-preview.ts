@@ -30,31 +30,40 @@ export interface LinkPreviewDetails {
 }
 
 export function canDisplayLinkPreview (val: LinkPreviewDetails): boolean {
-  if (val.hostname === undefined) {
+  if (isEmpty(val.host) && isEmpty(val.title)) {
     return false
   }
-  if (val.image === undefined && val.description === undefined) {
+  if (isEmpty(val.description) && isEmpty(val.image)) {
     return false
   }
-  if (val.title === undefined && val.description === undefined) {
-    return false
-  }
+
   return true
 }
 
-export async function fetchLinkPreviewDetails (url: string, timeoutMs = 15000): Promise<LinkPreviewDetails> {
+export async function fetchLinkPreviewDetails (
+  url: string,
+  timeoutMs = 5000,
+  fetcher = fetch
+): Promise<LinkPreviewDetails> {
   try {
     const linkPreviewUrl = getMetadata(plugin.metadata.LinkPreviewUrl)
-    let token: string = ''
+    const headers = new Headers()
     if (getMetadata(plugin.metadata.Token) !== undefined) {
-      token = getMetadata(plugin.metadata.Token) as string
+      const token = getMetadata(plugin.metadata.Token) as string
+      headers.set('Authorization', 'Bearer ' + token)
     }
-    const response = await fetch(`${linkPreviewUrl}/details?q=${url}`, {
-      headers: { Authorization: 'Bearer ' + token },
+    const response = await fetcher(`${linkPreviewUrl}/details?q=${url}`, {
+      headers,
       signal: AbortSignal.timeout(timeoutMs)
     })
-    return response.json() as LinkPreviewDetails
+    const res = (await response.json()) as LinkPreviewDetails
+    res.url = url
+    return res
   } catch {
     return {}
   }
+}
+
+function isEmpty (str: string | undefined): boolean {
+  return str === undefined || str.trim() === ''
 }

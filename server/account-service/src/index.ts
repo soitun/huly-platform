@@ -3,12 +3,13 @@
 //
 
 import account, {
+  type AccountMethods,
   EndpointKind,
   accountId,
-  cleanExpiredOtp,
   getAccountDB,
   getAllTransactors,
-  getMethods
+  getMethods,
+  cleanExpiredOtp
 } from '@hcengineering/account'
 import accountEn from '@hcengineering/account/lang/en.json'
 import accountRu from '@hcengineering/account/lang/ru.json'
@@ -23,6 +24,7 @@ import Koa from 'koa'
 import bodyParser from 'koa-bodyparser'
 import Router from 'koa-router'
 import os from 'os'
+import { migrateFromOldAccounts } from './migration/migration'
 
 /**
  * @public
@@ -35,6 +37,8 @@ export function serveAccount (measureCtx: MeasureContext, brandings: BrandingMap
     console.log('Please provide DB_URL')
     process.exit(1)
   }
+
+  const oldAccsUrl = process.env.OLD_ACCOUNTS_URL ?? (dbUrl.startsWith('mongodb://') ? dbUrl : undefined)
 
   const transactorUri = process.env.TRANSACTOR_URL
   if (transactorUri === undefined) {
@@ -60,6 +64,8 @@ export function serveAccount (measureCtx: MeasureContext, brandings: BrandingMap
   })
 
   const ses = process.env.SES_URL
+  const sesAuthToken = process.env.SES_AUTH_TOKEN
+
   const frontURL = process.env.FRONT_URL
   const productName = process.env.PRODUCT_NAME
   const lang = process.env.LANGUAGE ?? 'en'
@@ -81,6 +87,8 @@ export function serveAccount (measureCtx: MeasureContext, brandings: BrandingMap
   setMetadata(account.metadata.OtpTimeToLiveSec, parseInt(process.env.OTP_TIME_TO_LIVE ?? '60'))
   setMetadata(account.metadata.OtpRetryDelaySec, parseInt(process.env.OTP_RETRY_DELAY ?? '60'))
   setMetadata(account.metadata.SES_URL, ses)
+  setMetadata(account.metadata.SES_AUTH_TOKEN, sesAuthToken)
+
   setMetadata(account.metadata.FrontURL, frontURL)
   setMetadata(account.metadata.WsLivenessDays, wsLivenessDays)
 
@@ -91,6 +99,12 @@ export function serveAccount (measureCtx: MeasureContext, brandings: BrandingMap
 
   const dbNs = process.env.DB_NS
   const accountsDb = getAccountDB(dbUrl, dbNs)
+  const migrations = accountsDb.then(async ([db]) => {
+    if (oldAccsUrl !== undefined) {
+      await migrateFromOldAccounts(oldAccsUrl, db)
+      console.log('Migrations verified/done')
+    }
+  })
 
   const app = new Koa()
   const router = new Router()
@@ -204,7 +218,7 @@ export function serveAccount (measureCtx: MeasureContext, brandings: BrandingMap
     const token = extractToken(ctx.request.headers)
 
     const request = ctx.request.body as any
-    const method = methods[request.method]
+    const method = methods[request.method as AccountMethods]
     if (method === undefined) {
       const response = {
         id: request.id,
@@ -215,6 +229,7 @@ export function serveAccount (measureCtx: MeasureContext, brandings: BrandingMap
     }
 
     const [db] = await accountsDb
+    await migrations
 
     let host: string | undefined
     const origin = ctx.request.headers.origin ?? ctx.request.headers.referer
@@ -222,7 +237,19 @@ export function serveAccount (measureCtx: MeasureContext, brandings: BrandingMap
       host = new URL(origin).host
     }
     const branding = host !== undefined ? brandings[host] : null
-    const result = await measureCtx.with(request.method, {}, (ctx) => method(ctx, db, branding, request, token))
+    const result = await measureCtx.with(request.method, {}, (mctx) => {
+      if (method === undefined) {
+        const response = {
+          id: request.id,
+          error: new Status(Severity.ERROR, platform.status.UnknownMethod, { method: request.method })
+        }
+
+        ctx.body = JSON.stringify(response)
+        return
+      }
+
+      return method(mctx, db, branding, request, token)
+    })
 
     ctx.body = result
   })

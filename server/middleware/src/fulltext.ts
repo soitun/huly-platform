@@ -37,7 +37,6 @@ import core, {
   type SessionData,
   type Tx
 } from '@hcengineering/core'
-import { PlatformError, unknownError } from '@hcengineering/platform'
 import type {
   IndexedDoc,
   Middleware,
@@ -64,7 +63,7 @@ export class FullTextMiddleware extends BaseMiddleware implements Middleware {
     super(context, next)
     const fulltextEndpoints = fulltextUrl.split(';').map((it) => it.trim())
 
-    const hash = this.hashWorkspace(context.workspace.name)
+    const hash = this.hashWorkspace(context.workspace.uuid)
     this.fulltextEndpoint = fulltextEndpoints[Math.abs(hash % fulltextEndpoints.length)]
   }
 
@@ -91,9 +90,6 @@ export class FullTextMiddleware extends BaseMiddleware implements Middleware {
   }
 
   async init (ctx: MeasureContext): Promise<void> {
-    if (this.context.adapterManager == null) {
-      throw new PlatformError(unknownError('Adapter manager should be specified'))
-    }
     this.contexts = new Map(
       this.context.modelDb.findAllSync(core.class.FullTextSearchContext, {}).map((it) => [it.toClass, it])
     )
@@ -117,6 +113,7 @@ export class FullTextMiddleware extends BaseMiddleware implements Middleware {
     try {
       await fetch(this.fulltextEndpoint + '/api/v1/warmup', {
         method: 'PUT',
+        keepalive: true,
         headers: {
           'Content-Type': 'application/json'
         },
@@ -141,12 +138,13 @@ export class FullTextMiddleware extends BaseMiddleware implements Middleware {
       return await (
         await fetch(this.fulltextEndpoint + '/api/v1/search', {
           method: 'PUT',
+          keepalive: true,
           headers: {
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({
             token: this.token,
-            workspace: this.context.workspace,
+            workspace: this.context.workspace.uuid,
             _classes,
             query,
             fullTextLimit
@@ -364,11 +362,12 @@ export class FullTextMiddleware extends BaseMiddleware implements Middleware {
         return await (
           await fetch(this.fulltextEndpoint + '/api/v1/full-text-search', {
             method: 'PUT',
+            keepalive: true,
             headers: {
               'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-              workspace: this.context.workspace,
+              workspace: this.context.workspace.uuid,
               token: this.token,
               query,
               options
@@ -394,6 +393,7 @@ export class FullTextMiddleware extends BaseMiddleware implements Middleware {
     try {
       await fetch(this.fulltextEndpoint + '/api/v1/close', {
         method: 'PUT',
+        keepalive: true,
         headers: {
           'Content-Type': 'application/json'
         },

@@ -12,13 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-
 import {
   MeasureContext,
-  systemAccountEmail,
-  type BaseWorkspaceInfo,
+  systemAccountUuid,
   type Branding,
-  type WorkspaceIdWithUrl
+  type WorkspaceIds,
+  WorkspaceInfoWithStatus
 } from '@hcengineering/core'
 import { setMetadata } from '@hcengineering/platform'
 import { backupService, doBackupWorkspace } from '@hcengineering/server-backup'
@@ -34,10 +33,11 @@ export function startBackup (
   getConfig: (
     ctx: MeasureContext,
     dbUrl: string,
-    workspace: WorkspaceIdWithUrl,
+    workspace: WorkspaceIds,
     branding: Branding | null,
     externalStorage: StorageAdapter
-  ) => DbConfiguration
+  ) => DbConfiguration,
+  contextVars: Record<string, any>
 ): void {
   const config = _config()
   setMetadata(serverToken.metadata.Secret, config.Secret)
@@ -55,7 +55,7 @@ export function startBackup (
   const pipelineFactory = pipelineFactoryFactory(mainDbUrl, workspaceStorageAdapter)
 
   // A token to access account service
-  const token = generateToken(systemAccountEmail, { name: 'backup' })
+  const token = generateToken(systemAccountUuid, undefined, { service: 'backup' })
 
   const shutdown = backupService(
     ctx,
@@ -66,7 +66,8 @@ export function startBackup (
     (ctx, workspace, branding, externalStorage) => {
       return getConfig(ctx, mainDbUrl, workspace, branding, externalStorage)
     },
-    config.Region
+    config.Region,
+    contextVars
   )
 
   process.on('SIGINT', shutdown)
@@ -81,19 +82,18 @@ export function startBackup (
 
 export async function backupWorkspace (
   ctx: MeasureContext,
-  workspace: BaseWorkspaceInfo,
+  workspace: WorkspaceInfoWithStatus,
   pipelineFactoryFactory: (mongoUrl: string, storage: StorageAdapter) => PipelineFactory,
   getConfig: (
     ctx: MeasureContext,
     dbUrls: string,
-    workspace: WorkspaceIdWithUrl,
+    workspace: WorkspaceIds,
     branding: Branding | null,
     externalStorage: StorageAdapter
   ) => DbConfiguration,
   region: string,
-  freshBackup: boolean = false,
-  clean: boolean = false,
   downloadLimit: number,
+  contextVars: Record<string, any>,
 
   onFinish?: (backupStorage: StorageAdapter, workspaceStorage: StorageAdapter) => Promise<void>
 ): Promise<boolean> {
@@ -113,7 +113,7 @@ export async function backupWorkspace (
   const pipelineFactory = pipelineFactoryFactory(mainDbUrl, workspaceStorageAdapter)
 
   // A token to access account service
-  const token = generateToken(systemAccountEmail, { name: 'backup' })
+  const token = generateToken(systemAccountUuid, undefined, { name: 'backup', service: 'backup' })
 
   try {
     const result = await doBackupWorkspace(
@@ -127,10 +127,9 @@ export async function backupWorkspace (
         return getConfig(ctx, mainDbUrl, workspace, branding, externalStorage)
       },
       region,
-      freshBackup,
-      clean,
       downloadLimit,
-      []
+      [],
+      contextVars
     )
     if (result && onFinish !== undefined) {
       await onFinish(storageAdapter, workspaceStorageAdapter)

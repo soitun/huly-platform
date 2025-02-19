@@ -9,10 +9,19 @@ import documents, { DocumentState } from '@hcengineering/controlled-documents'
 import serverDocuments from '@hcengineering/server-controlled-documents'
 import contact from '@hcengineering/contact'
 import serverNotification from '@hcengineering/server-notification'
+import notification from '@hcengineering/notification'
 
 export { serverDocumentsId } from '@hcengineering/server-controlled-documents/src/index'
 
 export function createModel (builder: Builder): void {
+  builder.createDoc(serverCore.class.Trigger, core.space.Model, {
+    trigger: serverDocuments.trigger.OnSocialIdentityCreate,
+    txMatch: {
+      _class: core.class.TxCreateDoc,
+      objectClass: contact.class.SocialIdentity
+    }
+  })
+
   builder.createDoc(serverCore.class.Trigger, core.space.Model, {
     trigger: serverDocuments.trigger.OnDocDeleted,
     txMatch: {
@@ -49,13 +58,6 @@ export function createModel (builder: Builder): void {
     }
   })
 
-  builder.createDoc(serverCore.class.Trigger, core.space.Model, {
-    trigger: serverDocuments.trigger.OnWorkspaceOwnerAdded,
-    txMatch: {
-      objectClass: contact.class.PersonAccount
-    }
-  })
-
   builder.mixin(documents.class.DocumentMeta, core.class.Class, serverCore.mixin.SearchPresenter, {
     iconConfig: {
       component: documents.component.DocumentIcon
@@ -66,4 +68,13 @@ export function createModel (builder: Builder): void {
   builder.mixin(documents.class.ControlledDocument, core.class.Class, serverNotification.mixin.TextPresenter, {
     presenter: serverDocuments.function.ControlledDocumentTextPresenter
   })
+
+  builder.mixin(
+    documents.notification.CoAuthorsNotification,
+    notification.class.NotificationType,
+    serverNotification.mixin.TypeMatch,
+    {
+      func: serverDocuments.function.CoAuthorsTypeMatch
+    }
+  )
 }

@@ -14,7 +14,7 @@
 -->
 <script lang="ts">
   import core, { AnyAttribute, Class, DocumentUpdate, IndexKind, PropertyType, Ref, Type } from '@hcengineering/core'
-  import { getEmbeddedLabel, getResource, translateCB } from '@hcengineering/platform'
+  import { Asset, getEmbeddedLabel, getResource, translateCB } from '@hcengineering/platform'
   import presentation, { getClient } from '@hcengineering/presentation'
   import {
     AnyComponent,
@@ -26,8 +26,10 @@
     Label,
     Modal,
     ModernEditbox,
+    showPopup,
     themeStore
   } from '@hcengineering/ui'
+  import { IconPicker } from '@hcengineering/view-resources'
   import view from '@hcengineering/view-resources/src/plugin'
   import setting from '../plugin'
   import { clearSettingsStore } from '../store'
@@ -41,6 +43,7 @@
   let type: Type<PropertyType> | undefined = attribute.type
   let index: IndexKind | undefined = attribute.index
   let defaultValue: any | undefined = attribute.defaultValue
+  let icon: Asset | undefined = attribute.icon
   let is: AnyComponent | undefined
 
   const client = getClient()
@@ -62,6 +65,9 @@
     }
     if (defaultValue !== attribute.defaultValue) {
       update.defaultValue = defaultValue
+    }
+    if (icon !== attribute.icon) {
+      update.icon = icon
     }
     if (!exist) {
       if (index !== attribute.index) {
@@ -126,6 +132,14 @@
     attribute.hidden = value
     await client.update(attribute, { hidden: value })
   }
+
+  function setIcon (): void {
+    showPopup(IconPicker, { icon, showEmoji: false, showColor: false }, 'top', async (res) => {
+      if (res !== undefined) {
+        icon = res.icon
+      }
+    })
+  }
 </script>
 
 <Modal
@@ -152,12 +166,17 @@
     {/if}
   </svelte:fragment>
   <div class="hulyModal-content__titleGroup">
-    {#if attribute.isCustom}
-      <div class="hulyChip-item font-medium-12">
-        <Label label={setting.string.Custom} />
-      </div>
-    {/if}
-    <ModernEditbox bind:value={name} label={core.string.Name} size={'large'} kind={'ghost'} {disabled} />
+    <div class="flex items-center">
+      <ButtonIcon
+        icon={icon ?? setting.icon.Enums}
+        size={'medium'}
+        iconSize={'large'}
+        kind={'tertiary'}
+        {disabled}
+        on:click={setIcon}
+      />
+      <ModernEditbox bind:value={name} label={core.string.Name} size={'large'} kind={'ghost'} {disabled} />
+    </div>
   </div>
   <div class="hulyModal-content__settingsSet">
     <div class="hulyModal-content__settingsSet-line">

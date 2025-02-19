@@ -14,7 +14,7 @@
 -->
 <script lang="ts">
   import { Analytics } from '@hcengineering/analytics'
-  import { personByIdStore, personIdByAccountId } from '@hcengineering/contact-resources'
+  import { personByIdStore, personRefByPersonIdStore } from '@hcengineering/contact-resources'
   import { Room as TypeRoom } from '@hcengineering/love'
   import { getMetadata } from '@hcengineering/platform'
   import { Label, Loading, resizeObserver, deviceOptionsStore as deviceInfo } from '@hcengineering/ui'
@@ -31,9 +31,7 @@
   } from 'livekit-client'
   import { onDestroy, onMount, tick } from 'svelte'
   import presentation from '@hcengineering/presentation'
-  import aiBot from '@hcengineering/ai-bot'
-  import { Ref } from '@hcengineering/core'
-  import { Person, PersonAccount } from '@hcengineering/contact'
+  import { aiBotEmailSocialId } from '@hcengineering/ai-bot'
 
   import love from '../plugin'
   import { storePromise, currentRoom, infos, invites, myInfo, myRequests } from '../stores'
@@ -67,8 +65,7 @@
   let screen: HTMLVideoElement
   let roomEl: HTMLDivElement
 
-  let aiPersonId: Ref<Person> | undefined = undefined
-  $: aiPersonId = $personIdByAccountId.get(aiBot.account.AIBot as Ref<PersonAccount>)
+  $: aiPersonId = $personRefByPersonIdStore.get(aiBotEmailSocialId)
 
   function handleTrackSubscribed (
     track: RemoteTrack,
@@ -387,7 +384,7 @@
   $: activeParticipants = getActiveParticipants(participants)
 </script>
 
-<div bind:this={roomEl} class="flex-col-center w-full h-full right-navpanel-border" class:theme-dark={$isFullScreen}>
+<div bind:this={roomEl} class="flex-col-center w-full h-full" class:theme-dark={$isFullScreen}>
   {#if $isConnected && !$isCurrentInstanceConnected}
     <div class="flex justify-center error h-full w-full clear-mins">
       <Label label={love.string.AnotherWindowError} />

@@ -13,9 +13,9 @@
 // limitations under the License.
 -->
 <script lang="ts">
-  import contact, { Person, PersonAccount } from '@hcengineering/contact'
-  import { personAccountByIdStore, personByIdStore } from '@hcengineering/contact-resources'
-  import { Class, Doc, getCurrentAccount, Markup, Ref, Space, WithLookup } from '@hcengineering/core'
+  import contact, { getCurrentEmployee } from '@hcengineering/contact'
+  import { personByPersonIdStore } from '@hcengineering/contact-resources'
+  import { Class, Doc, Markup, Ref, Space, WithLookup } from '@hcengineering/core'
   import { getClient, MessageViewer, pendingCreatedDocs } from '@hcengineering/presentation'
   import { AttachmentDocList, AttachmentImageSize } from '@hcengineering/attachment-resources'
   import { getDocLinkTitle } from '@hcengineering/view-resources'
@@ -23,13 +23,12 @@
   import view from '@hcengineering/view'
   import activity, { ActivityMessage, ActivityMessageViewType, DisplayActivityMessage } from '@hcengineering/activity'
   import { ActivityDocLink, ActivityMessageTemplate, MessageInlineAction } from '@hcengineering/activity-resources'
-  import chunter, { ChatMessage, ChatMessageViewlet, InlineButton } from '@hcengineering/chunter'
+  import chunter, { ChatMessage, ChatMessageViewlet } from '@hcengineering/chunter'
   import { Attachment } from '@hcengineering/attachment'
   import { EmptyMarkup } from '@hcengineering/text'
 
   import ChatMessageHeader from './ChatMessageHeader.svelte'
   import ChatMessageInput from './ChatMessageInput.svelte'
-  import InlineButtons from '../InlineButtons.svelte'
   import { translatedMessagesStore, translatingMessagesStore, shownTranslatedMessagesStore } from '../../stores'
 
   export let value: WithLookup<ChatMessage> | undefined
@@ -48,7 +47,7 @@
   export let inline = false
   export let hoverStyles: 'borderedHover' | 'filledHover' = 'borderedHover'
   export let withShowMore: boolean = true
-  export let attachmentImageSize: AttachmentImageSize = 'auto'
+  export let attachmentImageSize: AttachmentImageSize = 'x-large'
   export let videoPreload = true
   export let hideLink = false
   export let compact = false
@@ -60,10 +59,7 @@
   const client = getClient()
   const hierarchy = client.getHierarchy()
   const STALE_TIMEOUT_MS = 5000
-  const currentAccount = getCurrentAccount()
-
-  let account: PersonAccount | undefined = undefined
-  let person: Person | undefined = undefined
+  const me = getCurrentEmployee()
 
   let parentMessage: DisplayActivityMessage | undefined = undefined
   let object: Doc | undefined
@@ -79,9 +75,8 @@
       })
       : []
 
-  $: accountId = value?.createdBy
-  $: account = accountId !== undefined ? $personAccountByIdStore.get(accountId as Ref<PersonAccount>) : undefined
-  $: person = account?.person !== undefined ? $personByIdStore.get(account.person) : undefined
+  $: personId = value?.createdBy
+  $: person = personId !== undefined ? $personByPersonIdStore.get(personId) : undefined
 
   let originalText = value?.message
 
@@ -148,7 +143,7 @@
   let isEditing = false
   let additionalActions: Action[] = []
 
-  $: isOwn = account !== undefined && account._id === currentAccount._id
+  $: isOwn = person !== undefined && person._id === me
 
   $: additionalActions = [
     ...(isOwn
@@ -166,8 +161,6 @@
 
   let attachments: Attachment[] | undefined = undefined
   $: attachments = value?.$lookup?.attachments as Attachment[] | undefined
-  let inlineButtons: InlineButton[] = []
-  $: inlineButtons = (value?.$lookup?.inlineButtons ?? []) as InlineButton[]
 
   let inlineActions: MessageInlineAction[] = []
 
@@ -266,21 +259,19 @@
           <ShowMore limit={compact ? 80 : undefined}>
             <div class="clear-mins">
               <MessageViewer message={displayText} />
-              {#if (value.attachments ?? 0) > 0 || (value.inlineButtons ?? 0) > 0}
+              {#if (value.attachments ?? 0) > 0}
                 <div class="mt-2" />
               {/if}
-              <AttachmentDocList {value} {attachments} imageSize={attachmentImageSize} {videoPreload} />
-              <InlineButtons {value} {inlineButtons} />
+              <AttachmentDocList {value} {attachments} imageSize={attachmentImageSize} {videoPreload} {isOwn} />
             </div>
           </ShowMore>
         {:else}
           <div class="clear-mins">
             <MessageViewer message={displayText} />
-            {#if (value.attachments ?? 0) > 0 || (value.inlineButtons ?? 0) > 0}
+            {#if (value.attachments ?? 0) > 0}
               <div class="mt-2" />
             {/if}
-            <AttachmentDocList {value} {attachments} imageSize={attachmentImageSize} {videoPreload} />
-            <InlineButtons {value} {inlineButtons} />
+            <AttachmentDocList {value} {attachments} imageSize={attachmentImageSize} {videoPreload} {isOwn} />
           </div>
         {/if}
       {:else if object}

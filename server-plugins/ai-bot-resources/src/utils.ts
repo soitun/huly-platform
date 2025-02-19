@@ -1,5 +1,5 @@
 //
-// Copyright © 2024 Hardcore Engineering Inc.
+// Copyright © 2024-2025 Hardcore Engineering Inc.
 //
 // Licensed under the Eclipse Public License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License. You may
@@ -15,23 +15,36 @@
 
 import { getMetadata } from '@hcengineering/platform'
 import serverAIBot from '@hcengineering/server-ai-bot'
-import { AIEventRequest } from '@hcengineering/ai-bot'
-import { concatLink, MeasureContext, systemAccountEmail, WorkspaceId } from '@hcengineering/core'
+import { concatLink, MeasureContext, systemAccountUuid, WorkspaceUuid } from '@hcengineering/core'
 import { generateToken } from '@hcengineering/server-token'
+import { AIEventRequest } from '@hcengineering/ai-bot'
 
-export function getSupportWorkspaceId (): string | undefined {
-  const supportWorkspaceId = getMetadata(serverAIBot.metadata.SupportWorkspaceId)
+export async function createAccountRequest (workspace: WorkspaceUuid, ctx: MeasureContext): Promise<void> {
+  const url = getMetadata(serverAIBot.metadata.EndpointURL) ?? ''
 
-  if (supportWorkspaceId === '') {
-    return undefined
+  if (url === '') {
+    return
   }
 
-  return supportWorkspaceId
+  try {
+    ctx.info('Requesting AI account creation', { url, workspace })
+    await fetch(concatLink(url, '/connect'), {
+      method: 'POST',
+      keepalive: true,
+      headers: {
+        Authorization: 'Bearer ' + generateToken(systemAccountUuid, workspace, { service: 'aibot' }),
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({})
+    })
+  } catch (err) {
+    ctx.error('Could not send create ai account request', { err })
+  }
 }
 
 export async function sendAIEvents (
   events: AIEventRequest[],
-  workspace: WorkspaceId,
+  workspace: WorkspaceUuid,
   ctx: MeasureContext
 ): Promise<void> {
   const url = getMetadata(serverAIBot.metadata.EndpointURL) ?? ''
@@ -44,7 +57,7 @@ export async function sendAIEvents (
     await fetch(concatLink(url, '/events'), {
       method: 'POST',
       headers: {
-        Authorization: 'Bearer ' + generateToken(systemAccountEmail, workspace),
+        Authorization: 'Bearer ' + generateToken(systemAccountUuid, workspace, { service: 'aibot' }),
         'Content-Type': 'application/json'
       },
       body: JSON.stringify(events)
@@ -54,24 +67,7 @@ export async function sendAIEvents (
   }
 }
 
-export async function createAccountRequest (workspace: WorkspaceId, ctx: MeasureContext): Promise<void> {
+export function hasAiEndpoint (): boolean {
   const url = getMetadata(serverAIBot.metadata.EndpointURL) ?? ''
-
-  if (url === '') {
-    return
-  }
-
-  try {
-    ctx.info('Requesting AI account creation', { url, workspace })
-    await fetch(concatLink(url, '/connect'), {
-      method: 'POST',
-      headers: {
-        Authorization: 'Bearer ' + generateToken(systemAccountEmail, workspace),
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({})
-    })
-  } catch (err) {
-    ctx.error('Could not send create ai account request', { err })
-  }
+  return url !== ''
 }

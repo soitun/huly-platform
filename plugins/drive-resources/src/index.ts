@@ -160,8 +160,15 @@ export async function CanRenameFolder (doc: Folder | Folder[] | undefined): Prom
   return doc !== undefined && !Array.isArray(doc)
 }
 
-export function HideArchivedDrives (value: boolean, query: DocumentQuery<Drive>): DocumentQuery<Drive> {
-  return value ? { ...query, archived: false } : query
+export async function CanDeleteFileVersion (
+  doc: WithLookup<FileVersion> | Array<WithLookup<FileVersion>> | undefined
+): Promise<boolean> {
+  if (doc === undefined) {
+    return false
+  }
+
+  const docs = Array.isArray(doc) ? doc : [doc]
+  return docs.every((p) => p.$lookup?.attachedTo !== undefined && p.$lookup?.attachedTo.file !== p._id)
 }
 
 export default async (): Promise<Resources> => ({
@@ -205,7 +212,7 @@ export default async (): Promise<Resources> => ({
     FolderLinkProvider,
     CanRenameFile,
     CanRenameFolder,
-    HideArchivedDrives
+    CanDeleteFileVersion
   },
   resolver: {
     Location: resolveLocation

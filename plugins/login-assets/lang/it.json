@@ -42,7 +42,6 @@
     "AlreadyJoined": "Hai già partecipato?",
     "ConfirmationSent": "Un messaggio è stato inviato alla tua email contenente un link per confermare il tuo indirizzo.",
     "ConfirmationSent2": "Segui il link per completare la registrazione.",
-    "Slogan": "Un luogo unico per gestire tutto il tuo lavoro\nBenvenuto nella piattaforma",
     "ContinueWith": "Continua con {provider}",
     "HaventReceivedCode": "Non hai ricevuto il codice?",
     "ResendCode": "Invia di nuovo il codice",
@@ -52,11 +51,19 @@
     "CanFindCode": "Non riesci a trovare il tuo codice? Controlla la tua cartella spam.",
     "LoginWithPassword": "Accedi con la password",
     "LoginWithCode": "Accedi con il codice",
+    "SignUpWithPassword": "Registrati con la password",
+    "SignUpWithCode": "Registrati con il codice",
     "FillInProfile": "Compila il tuo profilo",
     "SetUpPassword": "Imposta la tua password",
     "Next": "Avanti",
     "Skip": "Salta",
     "SignUpCompleted": "Registrazione completata",
-    "StartUsingHuly": "Inizia a usare Huly"
+    "StartUsingHuly": "Inizia a usare Huly",
+    "PasswordMinLength": "{count, plural, =1 {La password deve contenere almeno # carattere} other {La password deve contenere almeno # caratteri}}",
+    "PasswordMinSpecialChars": "{count, plural, =1 {La password deve contenere almeno # carattere speciale} other {La password deve contenere almeno # caratteri speciali}}",
+    "PasswordMinDigits": "{count, plural, =1 {La password deve contenere almeno # numero} other {La password deve contenere almeno # numeri}}",
+    "PasswordMinUpperChars": "{count, plural, =1 {La password deve contenere almeno # lettera maiuscola} other {La password deve contenere almeno # lettere maiuscole}}",
+    "PasswordMinLowerChars": "{count, plural, =1 {La password deve contenere almeno # lettera minuscola} other {La password deve contenere almeno # lettere minuscole}}",
+    "WorkspaceArchivedDesc": "Il workspace è stato archiviato perché inutilizzato. Si prega di contattarci per ripristinarlo..."
   }
 }

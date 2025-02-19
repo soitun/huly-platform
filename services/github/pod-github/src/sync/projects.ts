@@ -1,5 +1,4 @@
 import { Analytics } from '@hcengineering/analytics'
-import { PersonAccount } from '@hcengineering/contact'
 import core, {
   AnyAttribute,
   Class,
@@ -107,10 +106,14 @@ export class ProjectsSyncManager implements DocSyncManager {
       return { needSync: githubSyncVersion }
     }
 
-    const okit = await this.provider.getOctokit(container.project.createdBy as Ref<PersonAccount>)
+    if (container.project.createdBy === undefined) {
+      return
+    }
+
+    const okit = await this.provider.getOctokit(container.project.createdBy)
     if (okit === undefined) {
       this.ctx.info('No Authentication for author, waiting for authentication.', {
-        workspace: this.provider.getWorkspaceId().name
+        workspace: this.provider.getWorkspaceId()
       })
       return { needSync: githubSyncVersion, error: 'Need authentication for user' }
     }
@@ -270,8 +273,7 @@ export class ProjectsSyncManager implements DocSyncManager {
     const allAttributes = this.client.getHierarchy().getAllAttributes(tracker.class.Milestone)
     const platformUpdate = collectUpdate<Milestone>(previousData, existingMilestone, Array.from(allAttributes.keys()))
 
-    const okit =
-      (await this.provider.getOctokit(existing.modifiedBy as Ref<PersonAccount>)) ?? container.container.octokit
+    const okit = (await this.provider.getOctokit(existing.modifiedBy)) ?? container.container.octokit
 
     // Remove current same values from update
     for (const [k, v] of Object.entries(update)) {
@@ -322,7 +324,7 @@ export class ProjectsSyncManager implements DocSyncManager {
     if (project === undefined || repository === undefined) {
       this.ctx.error('Unable to find project and repository for event', {
         name: event.repository.name,
-        workspace: this.provider.getWorkspaceId().name
+        workspace: this.provider.getWorkspaceId()
       })
       return
     }
@@ -392,10 +394,10 @@ export class ProjectsSyncManager implements DocSyncManager {
         continue
       }
 
-      const okit = await this.provider.getOctokit(integration.integration.createdBy as Ref<PersonAccount>)
+      const okit = await this.provider.getOctokit(integration.integration.createdBy)
       if (okit === undefined) {
         this.ctx.info('No Authentication for author, waiting for authentication.', {
-          workspace: this.provider.getWorkspaceId().name
+          workspace: this.provider.getWorkspaceId()
         })
         continue
       }
@@ -446,9 +448,9 @@ export class ProjectsSyncManager implements DocSyncManager {
 
       if (syncConfig.SupportMilestones && integration.type === 'Organization') {
         // Check project milestones and sync their structure as well.
-        const milestones = (await this.provider.liveQuery.queryFind(github.mixin.GithubMilestone, {})).filter(
-          (it) => it.space === prj._id
-        )
+        const milestones = await this.provider.liveQuery.findAll(github.mixin.GithubMilestone, {
+          space: prj._id
+        })
         for (const m of milestones) {
           if (this.provider.isClosing()) {
             break
@@ -608,7 +610,7 @@ export class ProjectsSyncManager implements DocSyncManager {
     okit: Octokit
   ): Promise<{ projectStructure: GithubProjectV2, wasUpdates: boolean, mappings: GithubFieldMapping[] }> {
     let projectStructure = await this.queryProjectStructure(integration, target)
-    let mappings = target.mappings
+    let mappings = target.mappings ?? []
 
     if (projectStructure === undefined) {
       if (this.client.getHierarchy().isDerived(tracker.class.Project, target._class)) {
@@ -651,7 +653,7 @@ export class ProjectsSyncManager implements DocSyncManager {
     const mHash = JSON.stringify(mappings)
     // Create any platform field into matching github field
     for (const [, f] of allFields.entries()) {
-      const existingField = (mappings ?? []).find((it) => it._id === f._id)
+      const existingField = mappings.find((it) => it._id === f._id)
       if (f.hidden === true) {
         continue
       }

@@ -58,16 +58,17 @@ window.addEventListener('DOMContentLoaded', () => {
   })
 
   ipcMain.on('logout', () => {
-    const tokens = fetchMetadataLocalStorage(login.metadata.LoginTokens)
+    const tokens = fetchMetadataLocalStorage(login.metadata.LoginTokensV2)
     if (tokens !== null) {
       const loc = getCurrentLocation()
-      loc.path.splice(1, 1)
-      setMetadataLocalStorage(login.metadata.LoginTokens, tokens)
+      // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+      delete tokens[loc.path[1]]
+      setMetadataLocalStorage(login.metadata.LoginTokensV2, tokens)
     }
     setMetadata(presentation.metadata.Token, null)
     setMetadataLocalStorage(login.metadata.LastToken, null)
     setMetadataLocalStorage(login.metadata.LoginEndpoint, null)
-    setMetadataLocalStorage(login.metadata.LoginEmail, null)
+    setMetadataLocalStorage(login.metadata.LoginAccount, null)
     void closeClient().then(() => {
       navigate({ path: [loginId] })
     })
@@ -104,10 +105,17 @@ window.addEventListener('DOMContentLoaded', () => {
     // We need to obtain current token and endpoint and trigger backup
     const token = getMetadata(presentation.metadata.Token)
     const endpoint = getMetadata(presentation.metadata.Endpoint)
-    const workspace = getMetadata(presentation.metadata.WorkspaceId)
+    const workspaceUuid = getMetadata(presentation.metadata.WorkspaceUuid)
+    // const workspaceDataId = getMetadata(presentation.metadata.WorkspaceDataId)
+    // const workspaceUrl = getMetadata(presentation.metadata.WorkspaceUrl)
+    // const wsIds = {
+    //   uuid: workspaceUuid,
+    //   dataId: workspaceDataId,
+    //   url: workspaceUrl
+    // }
     if (isOwnerOrMaintainer()) {
-      if (token != null && endpoint != null && workspace != null) {
-        // ipcMain.startBackup(token, endpoint, workspace)
+      if (token != null && endpoint != null && workspaceUuid != null) {
+        // ipcMain.startBackup(token, endpoint, wsIds)
         closePopup()
         closePanel()
         const loc = getCurrentResolvedLocation()

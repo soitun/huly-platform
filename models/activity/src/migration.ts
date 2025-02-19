@@ -13,9 +13,22 @@
 // limitations under the License.
 //
 
-import { type ActivityMessage, type DocUpdateMessage, type Reaction } from '@hcengineering/activity'
+import {
+  type DocAttributeUpdates,
+  type ActivityMessage,
+  type DocUpdateMessage,
+  type Reaction
+} from '@hcengineering/activity'
 import contact from '@hcengineering/contact'
-import core, { type Class, type Doc, type Domain, groupByArray, type Ref, type Space } from '@hcengineering/core'
+import core, {
+  type Class,
+  type Doc,
+  type Domain,
+  groupByArray,
+  MeasureMetricsContext,
+  type Ref,
+  type Space
+} from '@hcengineering/core'
 import {
   type MigrateOperation,
   type MigrateUpdate,
@@ -26,6 +39,8 @@ import {
   tryMigrate
 } from '@hcengineering/model'
 import { htmlToMarkup } from '@hcengineering/text'
+import { getSocialIdByOldAccount } from '@hcengineering/model-core'
+
 import { activityId, DOMAIN_ACTIVITY, DOMAIN_REACTION, DOMAIN_USER_MENTION } from './index'
 import activity from './plugin'
 
@@ -181,6 +196,138 @@ async function migrateActivityMarkup (client: MigrationClient): Promise<void> {
   )
 }
 
+async function migrateAccountsToSocialIds (client: MigrationClient): Promise<void> {
+  const ctx = new MeasureMetricsContext('activity migrateAccountsToSocialIds', {})
+  const socialIdByAccount = await getSocialIdByOldAccount(client)
+
+  ctx.info('processing activity reactions ', {})
+  const iterator = await client.traverse(DOMAIN_REACTION, { _class: activity.class.Reaction })
+
+  try {
+    let processed = 0
+    while (true) {
+      const docs = await iterator.next(200)
+      if (docs === null || docs.length === 0) {
+        break
+      }
+
+      const operations: { filter: MigrationDocumentQuery<Doc>, update: MigrateUpdate<Doc> }[] = []
+
+      for (const doc of docs) {
+        const reaction = doc as Reaction
+        const newCreateBy = socialIdByAccount[reaction.createBy] ?? reaction.createBy
+
+        if (newCreateBy === reaction.createBy) continue
+
+        operations.push({
+          filter: { _id: doc._id },
+          update: {
+            createBy: newCreateBy
+          }
+        })
+      }
+
+      if (operations.length > 0) {
+        await client.bulk(DOMAIN_REACTION, operations)
+      }
+
+      processed += docs.length
+      ctx.info('...processed', { count: processed })
+    }
+  } finally {
+    await iterator.close()
+  }
+  ctx.info('finished processing activity reactions ', {})
+}
+
+async function migrateAccountsInDocUpdates (client: MigrationClient): Promise<void> {
+  const ctx = new MeasureMetricsContext('migrateAccountsInDocUpdates migrateAccountsToSocialIds', {})
+  const socialIdByAccount = await getSocialIdByOldAccount(client)
+  ctx.info('processing activity doc updates ', {})
+
+  function migrateField<P extends keyof DocAttributeUpdates> (
+    au: DocAttributeUpdates,
+    update: MigrateUpdate<DocUpdateMessage>['attributeUpdates'],
+    field: P
+  ): void {
+    const oldValue = au?.[field]
+    if (oldValue == null) return
+
+    let changed = false
+    let newValue: any
+    if (Array.isArray(oldValue)) {
+      newValue = (oldValue as string[]).map((a) => {
+        const newA = a != null ? socialIdByAccount[a] ?? a : a
+        if (newA !== a) {
+          changed = true
+        }
+        return newA
+      })
+    } else {
+      newValue = socialIdByAccount[oldValue] ?? oldValue
+      if (newValue !== oldValue) {
+        changed = true
+      }
+    }
+
+    if (changed) {
+      if (update == null) throw new Error('update is null')
+
+      update[field] = newValue
+    }
+  }
+
+  const iterator = await client.traverse(DOMAIN_ACTIVITY, {
+    _class: activity.class.DocUpdateMessage,
+    action: 'update',
+    'attributeUpdates.attrClass': 'core:class:Account'
+  })
+
+  try {
+    let processed = 0
+    while (true) {
+      const docs = await iterator.next(200)
+      if (docs === null || docs.length === 0) {
+        break
+      }
+
+      const operations: {
+        filter: MigrationDocumentQuery<DocUpdateMessage>
+        update: MigrateUpdate<DocUpdateMessage>
+      }[] = []
+
+      for (const doc of docs) {
+        const dum = doc as DocUpdateMessage
+        if (dum.attributeUpdates == null) continue
+        const update: any = { attributeUpdates: { ...dum.attributeUpdates } }
+
+        migrateField(dum.attributeUpdates, update.attributeUpdates, 'added')
+        migrateField(dum.attributeUpdates, update.attributeUpdates, 'prevValue')
+        migrateField(dum.attributeUpdates, update.attributeUpdates, 'removed')
+        migrateField(dum.attributeUpdates, update.attributeUpdates, 'set')
+
+        update.attributeUpdates.attrClass = core.class.TypePersonId
+
+        operations.push({
+          filter: { _id: dum._id },
+          update
+        })
+      }
+
+      if (operations.length > 0) {
+        await client.bulk(DOMAIN_ACTIVITY, operations)
+      }
+
+      processed += docs.length
+      ctx.info('...processed', { count: processed })
+    }
+  } finally {
+    await iterator.close()
+  }
+
+  ctx.info('finished processing activity doc updates ', {})
+}
+
 export const activityOperation: MigrateOperation = {
   async migrate (client: MigrationClient): Promise<void> {
     await tryMigrate(client, activityId, [
@@ -223,6 +370,14 @@ export const activityOperation: MigrateOperation = {
           await client.move(DOMAIN_ACTIVITY, { _class: activity.class.Reaction }, DOMAIN_REACTION)
           await client.move(DOMAIN_ACTIVITY, { _class: activity.class.UserMentionInfo }, DOMAIN_USER_MENTION)
         }
+      },
+      {
+        state: 'accounts-to-social-ids-v2',
+        func: migrateAccountsToSocialIds
+      },
+      {
+        state: 'accounts-in-doc-updates-v2',
+        func: migrateAccountsInDocUpdates
       }
     ])
   },

@@ -16,6 +16,8 @@
 import { countTokens } from '@hcengineering/openai'
 import { Tiktoken } from 'js-tiktoken'
 import OpenAI from 'openai'
+import { PersonId } from '@hcengineering/core'
+
 import config from '../config'
 import { HistoryRecord } from '../types'
 import { WorkspaceClient } from '../workspace/workspaceClient'
@@ -27,7 +29,7 @@ export async function translateHtml (client: OpenAI, html: string, lang: string)
     messages: [
       {
         role: 'system',
-        content: `Your task is to translate the text into ${lang} while preserving the html structure and metadata`
+        content: `Your task is to translate the text into ${lang} while preserving the html structure and metadata. Do not translate <span data-type="reference">`
       },
       {
         role: 'user',
@@ -71,7 +73,7 @@ export async function createChatCompletionWithTools (
   workspaceClient: WorkspaceClient,
   client: OpenAI,
   message: OpenAI.ChatCompletionMessageParam,
-  user?: string,
+  user?: PersonId,
   history: OpenAI.ChatCompletionMessageParam[] = [],
   skipCache = true
 ): Promise<
@@ -86,26 +88,22 @@ export async function createChatCompletionWithTools (
     opt.headers = { 'cf-skip-cache': 'true' }
   }
   try {
-    const res = client.beta.chat.completions
-      .runTools(
-        {
-          messages: [
-            {
-              role: 'system',
-              content: 'Use tools if possible, don`t use previous information after success using tool for user request'
-            },
-            ...history,
-            message
-          ],
-          model: config.OpenAIModel,
-          user,
-          tools: getTools(workspaceClient, user)
-        },
-        opt
-      )
-      .on('message', (message) => {
-        console.log(message)
-      })
+    const res = client.beta.chat.completions.runTools(
+      {
+        messages: [
+          {
+            role: 'system',
+            content: 'Use tools if possible, don`t use previous information after success using tool for user request'
+          },
+          ...history,
+          message
+        ],
+        model: config.OpenAIModel,
+        user,
+        tools: getTools(workspaceClient, user)
+      },
+      opt
+    )
     const str = await res.finalContent()
     const usage = (await res.totalUsage()).completion_tokens
     return {

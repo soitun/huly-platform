@@ -13,7 +13,7 @@
 // limitations under the License.
 //
 
-import type { Account, AccountRole, Blob, Class, Configuration, Doc, Mixin, Ref } from '@hcengineering/core'
+import type { PersonId, AccountRole, Blob, Class, Configuration, Doc, Mixin, Ref } from '@hcengineering/core'
 import type { Metadata, Plugin } from '@hcengineering/platform'
 import { Asset, IntlString, Resource, plugin } from '@hcengineering/platform'
 import { TemplateField, TemplateFieldCategory } from '@hcengineering/templates'
@@ -55,7 +55,7 @@ export interface Integration extends Doc {
   disabled: boolean
   value: string
   error?: IntlString | null
-  shared?: Ref<Account>[]
+  shared?: PersonId[]
 }
 
 /**
@@ -168,7 +168,10 @@ export default plugin(settingId, {
     RoleEditor: '' as AnyComponent,
     RoleAssignmentEditor: '' as AnyComponent,
     RelationSetting: '' as AnyComponent,
-    Backup: '' as AnyComponent
+    Backup: '' as AnyComponent,
+    CreateAttributePopup: '' as AnyComponent,
+    CreateRelation: '' as AnyComponent,
+    EditRelation: '' as AnyComponent
   },
   string: {
     Settings: '' as IntlString,
@@ -219,7 +222,8 @@ export default plugin(settingId, {
     BackupSnapshots: '' as IntlString,
     BackupFileDownload: '' as IntlString,
     BackupFiles: '' as IntlString,
-    BackupNoBackup: '' as IntlString
+    BackupNoBackup: '' as IntlString,
+    AddAttribute: '' as IntlString
   },
   icon: {
     AccountSettings: '' as Asset,

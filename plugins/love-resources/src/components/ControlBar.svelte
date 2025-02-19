@@ -13,12 +13,16 @@
 // limitations under the License.
 -->
 <script lang="ts">
-  import { PersonAccount } from '@hcengineering/contact'
+  import { getCurrentEmployee } from '@hcengineering/contact'
   import { AccountRole, getCurrentAccount, hasAccountRole } from '@hcengineering/core'
   import { Room, RoomType, isOffice, roomAccessIcon } from '@hcengineering/love'
   import { getResource } from '@hcengineering/platform'
   import { getClient } from '@hcengineering/presentation'
   import {
+    ButtonMenu,
+    DropdownIntlItem,
+    IconMaximize,
+    IconMoreV,
     IconUpOutline,
     ModernButton,
     PopupInstance,
@@ -26,11 +30,7 @@
     eventToHTMLElement,
     showPopup,
     type AnySvelteComponent,
-    type CompAndProps,
-    IconMoreV,
-    ButtonMenu,
-    DropdownIntlItem,
-    IconMaximize
+    type CompAndProps
   } from '@hcengineering/ui'
   import view, { Action } from '@hcengineering/view'
   import { getActions } from '@hcengineering/view-resources'
@@ -38,30 +38,35 @@
   import love from '../plugin'
   import { currentRoom, myInfo, myOffice } from '../stores'
   import {
-    isTranscriptionAllowed,
+    isCamAllowed,
     isCameraEnabled,
     isConnected,
     isFullScreen,
+    isMicAllowed,
     isMicEnabled,
     isRecording,
-    isTranscription,
     isRecordingAvailable,
+    isShareWithSound,
     isSharingEnabled,
+    isTranscription,
+    isTranscriptionAllowed,
     leaveRoom,
     record,
     screenSharing,
     setCam,
     setMic,
     setShare,
-    stopTranscription,
-    startTranscription
+    startTranscription,
+    stopTranscription
   } from '../utils'
   import CamSettingPopup from './CamSettingPopup.svelte'
+  import ControlBarContainer from './ControlBarContainer.svelte'
   import MicSettingPopup from './MicSettingPopup.svelte'
   import RoomAccessPopup from './RoomAccessPopup.svelte'
   import RoomLanguageSelector from './RoomLanguageSelector.svelte'
-  import ControlBarContainer from './ControlBarContainer.svelte'
   import RoomModal from './RoomModal.svelte'
+  import ShareSettingPopup from './ShareSettingPopup.svelte'
+  import { Room as LKRoom } from 'livekit-client'
 
   export let room: Room
   export let canMaximize: boolean = true
@@ -86,7 +91,9 @@
   }
 
   async function changeShare (): Promise<void> {
-    await setShare(!$isSharingEnabled)
+    const newValue = !$isSharingEnabled
+    const audio = newValue && $isShareWithSound
+    await setShare(newValue, audio)
   }
 
   async function leave (): Promise<void> {
@@ -122,6 +129,14 @@
     }
   }
 
+  function shareSettings (e: MouseEvent): void {
+    if (fullScreen) {
+      popup = getPopup(ShareSettingPopup, e)
+    } else {
+      showPopup(ShareSettingPopup, {}, eventToHTMLElement(e))
+    }
+  }
+
   function setAccess (e: MouseEvent): void {
     if (isOffice(room) && room.person !== me) return
     if (fullScreen) {
@@ -131,7 +146,7 @@
     }
   }
 
-  const me = (getCurrentAccount() as PersonAccount).person
+  const me = getCurrentEmployee()
   const client = getClient()
 
   const camKeys = client.getModel().findAllSync(view.class.Action, { _id: love.action.ToggleVideo })?.[0]?.keyBinding
@@ -189,8 +204,12 @@
       <SplitButton
         size={'large'}
         icon={$isMicEnabled ? love.icon.MicEnabled : love.icon.MicDisabled}
-        showTooltip={{ label: $isMicEnabled ? love.string.Mute : love.string.UnMute, keys: micKeys }}
+        showTooltip={{
+          label: !$isMicAllowed ? love.string.MicPermission : $isMicEnabled ? love.string.Mute : love.string.UnMute,
+          keys: micKeys
+        }}
         action={changeMute}
+        disabled={!$isMicAllowed}
         secondIcon={IconUpOutline}
         secondAction={micSettings}
         separate
@@ -199,8 +218,15 @@
         <SplitButton
           size={'large'}
           icon={$isCameraEnabled ? love.icon.CamEnabled : love.icon.CamDisabled}
-          showTooltip={{ label: $isCameraEnabled ? love.string.StopVideo : love.string.StartVideo, keys: camKeys }}
-          disabled={!$isConnected}
+          showTooltip={{
+            label: !$isCamAllowed
+              ? love.string.CamPermission
+              : $isCameraEnabled
+                ? love.string.StopVideo
+                : love.string.StartVideo,
+            keys: camKeys
+          }}
+          disabled={!$isCamAllowed}
           action={changeCam}
           secondIcon={IconUpOutline}
           secondAction={camSettings}
@@ -208,13 +234,15 @@
         />
       {/if}
       {#if allowShare}
-        <ModernButton
-          icon={$isSharingEnabled ? love.icon.SharingEnabled : love.icon.SharingDisabled}
-          tooltip={{ label: $isSharingEnabled ? love.string.StopShare : love.string.Share }}
-          disabled={($screenSharing && !$isSharingEnabled) || !$isConnected}
-          kind={'secondary'}
+        <SplitButton
           size={'large'}
-          on:click={changeShare}
+          icon={$isSharingEnabled ? love.icon.SharingEnabled : love.icon.SharingDisabled}
+          showTooltip={{ label: $isSharingEnabled ? love.string.StopShare : love.string.Share }}
+          disabled={($screenSharing && !$isSharingEnabled) || !$isConnected}
+          action={changeShare}
+          secondIcon={IconUpOutline}
+          secondAction={shareSettings}
+          separate
         />
       {/if}
       {#if hasAccountRole(getCurrentAccount(), AccountRole.User) && $isRecordingAvailable}

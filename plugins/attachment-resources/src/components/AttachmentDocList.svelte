@@ -23,8 +23,9 @@
 
   export let value: Doc & { attachments?: number }
   export let attachments: Attachment[] | undefined = undefined
-  export let imageSize: AttachmentImageSize = 'auto'
+  export let imageSize: AttachmentImageSize = 'x-large'
   export let videoPreload = true
+  export let isOwn = false
 
   const query = createQuery()
   const savedAttachmentsQuery = createQuery()
@@ -47,6 +48,9 @@
         },
         (res) => {
           resAttachments = res
+        },
+        {
+          showArchived: true
         }
       )
     } else {
@@ -59,4 +63,4 @@
   })
 </script>
 
-<AttachmentGroup attachments={resAttachments} {savedAttachmentsIds} {imageSize} {videoPreload} />
+<AttachmentGroup attachments={resAttachments} {savedAttachmentsIds} {imageSize} {videoPreload} {isOwn} />

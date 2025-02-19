@@ -14,19 +14,30 @@
 -->
 <script lang="ts">
   import { Attachment } from '@hcengineering/attachment'
-  import { Account, Class, Doc, IdMap, Markup, RateLimiter, Ref, Space, generateId, toIdMap } from '@hcengineering/core'
+  import {
+    Class,
+    Doc,
+    IdMap,
+    Markup,
+    PersonId,
+    RateLimiter,
+    Ref,
+    Space,
+    generateId,
+    toIdMap
+  } from '@hcengineering/core'
   import { Asset, IntlString, setPlatformStatus, unknownError } from '@hcengineering/platform'
   import {
     DraftController,
+    canDisplayLinkPreview,
     createQuery,
     deleteFile,
     draftsStore,
+    fetchLinkPreviewDetails,
     getClient,
     getFileMetadata,
-    uploadFile,
-    fetchLinkPreviewDetails,
-    canDisplayLinkPreview,
-    isLinkPreviewEnabled
+    isLinkPreviewEnabled,
+    uploadFile
   } from '@hcengineering/presentation'
   import { EmptyMarkup } from '@hcengineering/text'
   import textEditor, { type RefAction } from '@hcengineering/text-editor'
@@ -35,7 +46,6 @@
   import { createEventDispatcher, onDestroy, tick } from 'svelte'
   import attachment from '../plugin'
   import AttachmentPresenter from './AttachmentPresenter.svelte'
-  import { rmSync } from 'fs'
 
   export let objectId: Ref<Doc>
   export let space: Ref<Space>
@@ -117,21 +127,8 @@
     return url.protocol.startsWith('http')
   }
 
-  function longestSegment (s: string): string {
-    const segments = s.split('.')
-    let maxLen = segments[0].length
-    let result = segments[0]
-    for (const segment of segments) {
-      if (segment.length > maxLen) {
-        result = segment
-        maxLen = segment.length
-      }
-    }
-    return result
-  }
   function getUrlKey (s: string): string {
-    const url = new URL(s)
-    return longestSegment(url.host) + url.pathname
+    return s
   }
 
   $: objectId && updateAttachments(objectId)
@@ -190,7 +187,7 @@
         _class: attachment.class.Attachment,
         collection: 'attachments',
         modifiedOn: 0,
-        modifiedBy: '' as Ref<Account>,
+        modifiedBy: '' as PersonId,
         space,
         attachedTo: objectId,
         attachedToClass: _class,
@@ -333,7 +330,7 @@
     const hrefs = refContainer.getElementsByTagName('a')
     const newUrls: string[] = []
     for (let i = 0; i < hrefs.length; i++) {
-      if (hrefs[i].target !== '_blank' || !isValidUrl(hrefs[i].href)) {
+      if (hrefs[i].target !== '_blank' || !isValidUrl(hrefs[i].href) || hrefs[i].rel === '') {
         continue
       }
       const key = getUrlKey(hrefs[i].href)
@@ -363,7 +360,7 @@
         if (canDisplayLinkPreview(meta) && meta.url !== undefined) {
           const blob = new Blob([JSON.stringify(meta)])
           const file = new File([blob], meta.url, { type: 'application/link-preview' })
-          void createAttachment(file)
+          await createAttachment(file)
         }
       } catch (err: any) {
         void setPlatformStatus(unknownError(err))

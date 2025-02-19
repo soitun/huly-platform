@@ -103,10 +103,10 @@ const syncTabLoc = reduceCalls(async (): Promise<void> => {
       space: core.space.Workspace,
       location: url,
       name,
-      attachedTo: me._id,
+      attachedTo: me.primarySocialId,
       isPinned: false,
       modifiedOn: Date.now(),
-      modifiedBy: me._id
+      modifiedBy: me.primarySocialId
     }
     console.log('Creating new tab when pinned location changed', { newLocation: url, pinnedLocation: tab.location })
     await getClient().createDoc(workbench.class.WorkbenchTab, core.space.Workspace, newTab, newTab._id)
@@ -141,7 +141,7 @@ export function syncWorkbenchTab (): void {
 function getTabIdLocalStorageKey (workspace: string): string | undefined {
   const me = getCurrentAccount()
   if (me == null || workspace === '') return undefined
-  return `workbench.${workspace}.${me.person}.tab`
+  return `workbench.${workspace}.${me.uuid}.tab`
 }
 
 function getTabFromLocalStorage (workspace: string): Ref<WorkbenchTab> | undefined {
@@ -196,7 +196,6 @@ export async function closeTab (tab: WorkbenchTab): Promise<void> {
 export async function createTab (): Promise<void> {
   const loc = getCurrentLocation()
   const client = getClient()
-  const me = getCurrentAccount()
   let defaultUrl = `${workbenchId}/${loc.path[1]}/${notificationId}`
 
   try {
@@ -211,7 +210,7 @@ export async function createTab (): Promise<void> {
 
   const name = await translate(notification.string.Inbox, {}, get(languageStore))
   const tab = await client.createDoc(workbench.class.WorkbenchTab, core.space.Workspace, {
-    attachedTo: me._id,
+    attachedTo: getCurrentAccount().primarySocialId,
     location: defaultUrl,
     isPinned: false,
     name

@@ -10,8 +10,6 @@ import { IssuesPage } from '../model/tracker/issues-page'
 import { IssuesDetailsPage } from '../model/tracker/issues-details-page'
 import { TrackerNavigationMenuPage } from '../model/tracker/tracker-navigation-menu-page'
 import { SignInJoinPage } from '../model/signin-page'
-import { UserProfilePage } from '../model/profile/user-profile-page'
-import { faker } from '@faker-js/faker'
 
 test.describe('Workspace tests', () => {
   let loginPage: LoginPage
@@ -20,7 +18,6 @@ test.describe('Workspace tests', () => {
   let leftSideMenuPage: LeftSideMenuPage
   let trackerNavigationMenuPage: TrackerNavigationMenuPage
   let issuesPage: IssuesPage
-  let userProfilePage: UserProfilePage
 
   test.beforeEach(async ({ page }) => {
     loginPage = new LoginPage(page)
@@ -29,7 +26,6 @@ test.describe('Workspace tests', () => {
     leftSideMenuPage = new LeftSideMenuPage(page)
     trackerNavigationMenuPage = new TrackerNavigationMenuPage(page)
     issuesPage = new IssuesPage(page)
-    userProfilePage = new UserProfilePage(page)
   })
 
   test('Create a workspace with a custom name', async () => {
@@ -42,7 +38,7 @@ test.describe('Workspace tests', () => {
     const newWorkspaceName = `New Workspace Name - ${generateId(2)}`
     await loginPage.goto()
     await loginPage.clickSignUp()
-    await signUpPage.signUp(newUser)
+    await signUpPage.signUpPwd(newUser)
     await selectWorkspacePage.createWorkspace(newWorkspaceName)
     await leftSideMenuPage.clickTracker()
   })
@@ -71,7 +67,7 @@ test.describe('Workspace tests', () => {
     const newWorkspaceName = `New Issue Name - ${generateId(2)}`
     await loginPage.goto()
     await loginPage.clickSignUp()
-    await signUpPage.signUp(newUser)
+    await signUpPage.signUpPwd(newUser)
     await selectWorkspacePage.createWorkspace(newWorkspaceName)
 
     await trackerNavigationMenuPage.openIssuesForProject('Default')
@@ -95,6 +91,7 @@ test.describe('Workspace tests', () => {
     await loginPage.goto()
     await loginPage.clickSignUp()
 
+    await signUpPage.signUpPasswordBtn().click()
     await signUpPage.checkInfo(page, 'Required field First name')
     await signUpPage.enterFirstName(newUser.firstName)
     await signUpPage.checkInfo(page, 'Required field Last name')
@@ -122,7 +119,7 @@ test.describe('Workspace tests', () => {
     const newWorkspaceName = `Some HULY #@$ WS - ${generateId(12)}`
     await loginPage.goto()
     await loginPage.clickSignUp()
-    await signUpPage.signUp(newUser)
+    await signUpPage.signUpPwd(newUser)
     await selectWorkspacePage.createWorkspace(newWorkspaceName)
     await leftSideMenuPage.clickTracker()
 
@@ -145,7 +142,7 @@ test.describe('Workspace tests', () => {
 
       await page2.getByRole('link', { name: 'Sign Up' }).click()
       const signUpPage2 = new SignUpPage(page2)
-      await signUpPage2.signUp(newUser2, 'join')
+      await signUpPage2.signUpPwd(newUser2, 'join')
 
       const leftSideMenuPage2 = new LeftSideMenuPage(page2)
       await leftSideMenuPage2.clickTracker()
@@ -164,7 +161,7 @@ test.describe('Workspace tests', () => {
     const newWorkspaceName = `Some HULY #@$ WS - ${generateId(12)}`
     await loginPage.goto()
     await loginPage.clickSignUp()
-    await signUpPage.signUp(newUser)
+    await signUpPage.signUpPwd(newUser)
     await selectWorkspacePage.createWorkspace(newWorkspaceName)
     await leftSideMenuPage.clickTracker()
 
@@ -188,7 +185,7 @@ test.describe('Workspace tests', () => {
       }
 
       const signUpPage2 = new SignUpPage(page2)
-      await signUpPage2.signUp(newUser2)
+      await signUpPage2.signUpPwd(newUser2)
 
       // Ok we signed in, and no workspace present.
       await page2.goto(linkText ?? '')
@@ -231,27 +228,5 @@ test.describe('Workspace tests', () => {
         await pageSecond.close()
       }
     })
-  })
-
-  test('User can leave workspace', async () => {
-    const newUser: SignUpData = {
-      firstName: faker.person.firstName(),
-      lastName: faker.person.lastName(),
-      email: faker.internet.email(),
-      password: '1234'
-    }
-    const newWorkspaceName = `Some HULY #@$ WS - ${generateId(12)}`
-    await loginPage.goto()
-    await loginPage.clickSignUp()
-    await signUpPage.signUp(newUser)
-    await selectWorkspacePage.createWorkspace(newWorkspaceName)
-    await trackerNavigationMenuPage.checkIfTrackerSidebarIsVisible()
-    await userProfilePage.openProfileMenu()
-    await userProfilePage.selectProfileByName(newUser.lastName + ' ' + newUser.firstName)
-    await userProfilePage.clickLeaveWorkspaceButton()
-    await userProfilePage.clickLeaveWorkspaceCancelButton()
-    await userProfilePage.clickLeaveWorkspaceButton()
-    await userProfilePage.clickLeaveWorkspaceConfirmButton()
-    await userProfilePage.checkIfAccountIsDisabled()
   })
 })

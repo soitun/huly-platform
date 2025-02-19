@@ -13,23 +13,20 @@
 // limitations under the License.
 -->
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte'
-  import { type Ref, type Doc, SortingOrder, getCurrentAccount, WithLookup } from '@hcengineering/core'
-  import { createQuery } from '@hcengineering/presentation'
-  import type { PersonAccount } from '@hcengineering/contact'
-  import { type Action } from '@hcengineering/ui'
   import documents, {
-    type ControlledDocument,
     type DocumentMeta,
-    type ProjectMeta,
-    type ProjectDocument,
-    getDocumentName,
-    DocumentState
+    DocumentState,
+    ProjectDocumentTree,
+    getDocumentName
   } from '@hcengineering/controlled-documents'
+  import { type Doc, type Ref } from '@hcengineering/core'
+  import { type Action } from '@hcengineering/ui'
   import { TreeItem } from '@hcengineering/view-resources'
+  import { createEventDispatcher } from 'svelte'
 
-  export let projectMeta: ProjectMeta[] = []
-  export let childrenByParent: Record<Ref<DocumentMeta>, Array<ProjectMeta>>
+  export let tree = new ProjectDocumentTree()
+  export let documentIds: Ref<DocumentMeta>[] = []
+
   export let selected: Ref<Doc> | undefined
   export let level: number = 0
   export let getMoreActions: ((obj: Doc, originalEvent?: MouseEvent) => Promise<Action[]>) | undefined = undefined
@@ -45,106 +42,42 @@
 
   import DropArea from './DropArea.svelte'
 
+  const removeStates = [DocumentState.Obsolete, DocumentState.Deleted]
+
   const dispatch = createEventDispatcher()
-  const currentUser = getCurrentAccount() as PersonAccount
-  const currentPerson = currentUser.person
-
-  let docs: WithLookup<ProjectDocument>[] = []
-
-  function sortDocs (meta: ProjectMeta[]): void {
-    const metaById = new Map(meta.map((p) => [p._id, p]))
-    docs = docs.slice().sort((a, b) => {
-      const metaA = metaById.get(a.attachedTo)
-      const metaB = metaById.get(b.attachedTo)
-
-      if (metaA !== undefined && metaB !== undefined) {
-        return metaA.rank.localeCompare(metaB.rank)
-      }
-      return 0
-    })
-  }
-
-  $: sortDocs(projectMeta)
-
-  const docsQuery = createQuery()
-
-  $: docsQuery.query(
-    documents.class.ProjectDocument,
-    {
-      '$lookup.document.state': { $ne: DocumentState.Deleted },
-      attachedTo: { $in: projectMeta.map((p) => p._id) }
-    },
-    (result) => {
-      docs = []
-      let lastTemplate: string | undefined = '###'
-      let lastSeqNumber = -1
-
-      for (const prjdoc of result) {
-        const doc = prjdoc.$lookup?.document as ControlledDocument | undefined
-        if (doc === undefined) continue
-        if (doc.state === DocumentState.Deleted) continue
-
-        // TODO add proper fix, when document with no template copied, saved value is null
-        const template = doc.template ?? undefined
-        if (template === lastTemplate && doc.seqNumber === lastSeqNumber) {
-          continue
-        }
-
-        if (
-          [DocumentState.Effective, DocumentState.Archived].includes(doc.state) ||
-          doc.owner === currentPerson ||
-          doc.coAuthors.findIndex((emp) => emp === currentPerson) >= 0 ||
-          doc.approvers.findIndex((emp) => emp === currentPerson) >= 0 ||
-          doc.reviewers.findIndex((emp) => emp === currentPerson) >= 0
-        ) {
-          docs.push(prjdoc)
-
-          lastTemplate = template
-          lastSeqNumber = doc.seqNumber
-        }
-      }
-
-      sortDocs(projectMeta)
-    },
-    {
-      lookup: {
-        document: documents.class.ControlledDocument
-      },
-      sort: {
-        '$lookup.document.template': SortingOrder.Ascending,
-        '$lookup.document.seqNumber': SortingOrder.Ascending,
-        '$lookup.document.major': SortingOrder.Descending,
-        '$lookup.document.minor': SortingOrder.Descending,
-        '$lookup.document.patch': SortingOrder.Descending
-      }
-    }
-  )
 
   async function getDocMoreActions (obj: Doc): Promise<Action[]> {
     return getMoreActions !== undefined ? await getMoreActions(obj) : []
   }
 </script>
 
-{#each docs as prjdoc}
-  {@const doc = prjdoc.$lookup?.document}
+{#each documentIds as metaid}
+  {@const bundle = tree.bundleOf(metaid)}
+  {@const prjdoc = bundle?.ProjectDocument[0]}
+  {@const doc = bundle?.ControlledDocument[0]}
+  {@const meta = bundle?.DocumentMeta[0]}
+  {@const title = doc ? getDocumentName(doc) : meta?.title ?? ''}
+  {@const docid = doc?._id ?? prjdoc?._id}
+  {@const isFolder = prjdoc?.document === documents.ids.Folder}
+  {@const children = tree.childrenOf(metaid)}
+  {@const isRemoved = doc && removeStates.includes(doc.state)}
 
-  {#if doc}
-    {@const children = childrenByParent[doc.attachedTo] ?? []}
-    {@const isDraggedOver = draggedOver === doc.attachedTo}
+  {#if prjdoc && metaid}
+    {@const isDraggedOver = draggedOver === metaid}
     <div class="flex-col relative">
       {#if isDraggedOver}
         <DropArea />
       {/if}
       <TreeItem
-        _id={doc._id}
-        icon={documents.icon.Document}
+        _id={docid}
+        icon={isFolder ? documents.icon.Folder : documents.icon.Document}
         iconProps={{
-          fill: 'currentColor'
+          fill: isRemoved ? 'var(--dangerous-bg-color)' : 'currentColor'
         }}
-        title={getDocumentName(doc)}
-        selected={selected === doc._id || selected === prjdoc._id}
+        {title}
+        selected={selected === docid || selected === prjdoc._id}
         isFold
-        empty={children.length === 0 || children === undefined}
+        empty={children.length === 0}
         actions={getMoreActions !== undefined ? () => getDocMoreActions(prjdoc) : undefined}
         {level}
         {collapsedPrefix}
@@ -154,23 +87,23 @@
         }}
         draggable={onDragStart !== undefined}
         on:dragstart={(evt) => {
-          onDragStart?.(evt, doc.attachedTo)
+          onDragStart?.(evt, metaid)
         }}
         on:dragover={(evt) => {
-          onDragOver?.(evt, doc.attachedTo)
+          onDragOver?.(evt, metaid)
         }}
         on:dragend={(evt) => {
-          onDragEnd?.(evt, doc.attachedTo)
+          onDragEnd?.(evt, metaid)
         }}
         on:drop={(evt) => {
-          onDrop?.(evt, doc.attachedTo)
+          onDrop?.(evt, metaid)
         }}
       >
         <svelte:fragment slot="dropbox">
           {#if children.length}
             <svelte:self
-              projectMeta={children}
-              {childrenByParent}
+              documentIds={children}
+              {tree}
               {selected}
               {collapsedPrefix}
               {getMoreActions}

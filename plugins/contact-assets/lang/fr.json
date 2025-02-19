@@ -105,6 +105,12 @@
     "For": "Pour",
     "SelectUsers": "Sélectionner des utilisateurs",
     "AddGuest": "Ajouter un invité",
-    "ViewProfile": "Voir le profil"
+    "ViewProfile": "Voir le profil",
+    "Viber": "Viber",
+    "ViberPlaceholder": "Viber",
+    "SocialId": "Identifiant social",
+    "SocialIds": "Identifiants sociaux",
+    "Type": "Type",
+    "Confirmed": "Confirmé"
   }
 }

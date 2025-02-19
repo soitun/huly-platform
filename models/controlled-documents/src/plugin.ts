@@ -19,7 +19,7 @@ import type { Client, Doc, Ref } from '@hcengineering/core'
 import { type ObjectSearchCategory, type ObjectSearchFactory } from '@hcengineering/model-presentation'
 import { mergeIds, type Resource } from '@hcengineering/platform'
 import { type TagCategory } from '@hcengineering/tags'
-import { type AnyComponent } from '@hcengineering/ui'
+import { type AnyComponent } from '@hcengineering/ui/src/types'
 import { type ActionCategory, type ViewAction } from '@hcengineering/view'
 import { type NotificationType, type NotificationGroup } from '@hcengineering/notification'
 import { type TextActionVisibleFunction, type TextActionFunction } from '@hcengineering/text-editor'
@@ -59,10 +59,17 @@ export default mergeIds(documentsId, documents, {
   actionImpl: {
     CreateChildDocument: '' as ViewAction,
     CreateChildTemplate: '' as ViewAction,
+    CreateChildFolder: '' as ViewAction,
+    RenameFolder: '' as ViewAction,
+    DeleteFolder: '' as ViewAction,
     CreateDocument: '' as ViewAction,
     CreateTemplate: '' as ViewAction,
+    CreateFolder: '' as ViewAction,
+    TransferTemplate: '' as ViewAction,
     DeleteDocument: '' as ViewAction,
     ArchiveDocument: '' as ViewAction,
+    MakeDocumentObsolete: '' as ViewAction,
+    TransferDocument: '' as ViewAction,
     EditDocSpace: '' as ViewAction
   },
   viewlet: {
@@ -74,7 +81,6 @@ export default mergeIds(documentsId, documents, {
   notification: {
     DocumentsNotificationGroup: '' as Ref<NotificationGroup>,
     ContentNotification: '' as Ref<NotificationType>,
-    StateNotification: '' as Ref<NotificationType>,
-    CoAuthorsNotification: '' as Ref<NotificationType>
+    StateNotification: '' as Ref<NotificationType>
   }
 })

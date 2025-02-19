@@ -13,33 +13,32 @@
 // limitations under the License.
 -->
 <script lang="ts">
-  import { onDestroy } from 'svelte'
-  import { Class, Doc, DocumentQuery, Ref, Space, WithLookup } from '@hcengineering/core'
-  import { IntlString, Asset, getResource } from '@hcengineering/platform'
+  import { Class, Doc, DocumentQuery, FindOptions, Ref, Space, WithLookup, mergeQueries } from '@hcengineering/core'
+  import { Asset, IntlString } from '@hcengineering/platform'
   import { getClient } from '@hcengineering/presentation'
   import {
     AnyComponent,
+    Breadcrumb,
     Button,
     Component,
+    Header,
     IconAdd,
     IModeSelector,
     Loading,
     ModeSelector,
     SearchInput,
-    showPopup,
-    Header,
-    Breadcrumb
+    showPopup
   } from '@hcengineering/ui'
+  import { Viewlet, ViewletDescriptor, ViewletPreference, ViewOptions } from '@hcengineering/view'
   import {
-    ViewOptionModel,
-    ViewOptions,
-    ViewQueryOption,
-    Viewlet,
-    ViewletDescriptor,
-    ViewletPreference
-  } from '@hcengineering/view'
-  import { FilterBar, FilterButton, ViewletSelector, ViewletSettingButton } from '@hcengineering/view-resources'
-  import { ParentsNavigationModel } from '@hcengineering/workbench'
+    FilterBar,
+    FilterButton,
+    getResultOptions,
+    getResultQuery,
+    ViewletSelector,
+    ViewletSettingButton
+  } from '@hcengineering/view-resources'
+  import { QueryOptions, ParentsNavigationModel } from '@hcengineering/workbench'
 
   import ComponentNavigator from './ComponentNavigator.svelte'
 
@@ -47,16 +46,17 @@
   export let space: Ref<Space> | undefined = undefined
   export let icon: Asset
   export let label: IntlString
-  export let createEvent: string | undefined
-  export let createLabel: IntlString | undefined
-  export let createComponent: AnyComponent | undefined
+  export let createEvent: string | undefined = undefined
+  export let createLabel: IntlString | undefined = undefined
+  export let createComponent: AnyComponent | undefined = undefined
   export let createComponentProps: Record<string, any> = {}
-  export let createButton: AnyComponent | undefined
+  export let createButton: AnyComponent | undefined = undefined
   export let isCreationDisabled = false
   export let descriptors: Array<Ref<ViewletDescriptor>> | undefined = undefined
   export let baseQuery: DocumentQuery<Doc> | undefined = undefined
   export let modes: IModeSelector<any> | undefined = undefined
-  export let navigationModel: ParentsNavigationModel | undefined
+  export let navigationModel: ParentsNavigationModel | undefined = undefined
+  export let queryOptions: QueryOptions | undefined = undefined
 
   const client = getClient()
   const hierarchy = client.getHierarchy()
@@ -69,12 +69,24 @@
   let viewlets: Array<WithLookup<Viewlet>> = []
   let viewOptions: ViewOptions | undefined
 
-  $: _baseQuery = { ...(baseQuery ?? {}), ...(viewlet?.baseQuery ?? {}) }
+  $: spaceQuery = queryOptions?.filterBySpace === true && space !== undefined ? { space } : {}
+  $: _baseQuery = mergeQueries(mergeQueries(baseQuery ?? {}, viewlet?.baseQuery ?? {}), spaceQuery)
   $: query = { ..._baseQuery }
   $: searchQuery = search === '' ? query : { ...query, $search: search }
   $: resultQuery = searchQuery
 
+  let options = viewlet?.options
+
   $: void updateQuery(_baseQuery, viewOptions, viewlet)
+  $: void updateOptions(viewlet?.options, viewOptions, viewlet)
+
+  async function updateOptions (
+    _options: FindOptions<Doc> | undefined,
+    viewOptions: ViewOptions | undefined,
+    viewlet: Viewlet | undefined
+  ): Promise<void> {
+    options = await getResultOptions(_options, viewlet?.viewOptions?.other, viewOptions)
+  }
 
   async function updateQuery (
     initialQuery: DocumentQuery<Doc>,
@@ -83,29 +95,8 @@
   ): Promise<void> {
     query =
       viewOptions !== undefined && viewlet !== undefined
-        ? await getViewQuery(initialQuery, viewOptions, viewlet.viewOptions?.other)
+        ? await getResultQuery(hierarchy, initialQuery, viewlet.viewOptions?.other, viewOptions)
         : initialQuery
-  }
-
-  async function getViewQuery (
-    query: DocumentQuery<Doc>,
-    viewOptions: ViewOptions,
-    viewOptionsModel: ViewOptionModel[] | undefined
-  ): Promise<DocumentQuery<Doc>> {
-    if (viewOptionsModel === undefined) return query
-    let result: DocumentQuery<Doc> = hierarchy.clone(query)
-    for (const viewOption of viewOptionsModel) {
-      if (viewOption.actionTarget !== 'query') continue
-      const queryOption = viewOption as ViewQueryOption
-      const f = await getResource(queryOption.action)
-      const resultP = f(viewOptions[queryOption.key] ?? queryOption.defaultValue, result)
-      if (resultP instanceof Promise) {
-        result = await resultP
-      } else {
-        result = resultP
-      }
-    }
-    return result
   }
 
   function showCreateDialog (): void {
@@ -125,6 +116,7 @@
       bind:viewlet
       bind:preference
       bind:viewlets
+      ignoreFragment
       viewletQuery={{
         attachTo: _class,
         variant: { $exists: false },
@@ -187,7 +179,7 @@
       props={{
         _class,
         space,
-        options: viewlet.options,
+        options,
         config: preference?.config ?? viewlet.config,
         viewlet,
         viewOptions,
@@ -207,7 +199,7 @@
       mainComponentProps={{
         _class,
         space,
-        options: viewlet.options,
+        options,
         config: preference?.config ?? viewlet.config,
         viewlet,
         viewOptions,

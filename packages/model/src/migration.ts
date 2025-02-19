@@ -1,3 +1,4 @@
+import { AccountClient } from '@hcengineering/account-client'
 import { Analytics } from '@hcengineering/analytics'
 import core, {
   Class,
@@ -10,18 +11,16 @@ import core, {
   Domain,
   FindOptions,
   Hierarchy,
-  IncOptions,
   MigrationState,
   ModelDb,
   ObjQueryType,
-  PushOptions,
   Rank,
   Ref,
   SortingOrder,
   Space,
   TxOperations,
   UnsetOptions,
-  WorkspaceId,
+  WorkspaceIds,
   generateId
 } from '@hcengineering/core'
 import { makeRank } from '@hcengineering/rank'
@@ -31,11 +30,7 @@ import { ModelLogger } from './utils'
 /**
  * @public
  */
-export type MigrateUpdate<T extends Doc> = Partial<T> &
-PushOptions<T> &
-IncOptions<T> &
-UnsetOptions &
-Record<string, any>
+export type MigrateUpdate<T extends Doc> = Partial<T> & UnsetOptions & Record<string, any>
 
 /**
  * @public
@@ -79,6 +74,9 @@ export interface MigrationClient {
     options?: Omit<FindOptions<T>, 'lookup'>
   ) => Promise<T[]>
 
+  // Raw group by, allow to group documents inside domain.
+  groupBy: <T, P extends Doc>(domain: Domain, field: string, query?: DocumentQuery<P>) => Promise<Map<T, number>>
+
   // Traverse documents
   traverse: <T extends Doc>(
     domain: Domain,
@@ -115,8 +113,9 @@ export interface MigrationClient {
 
   migrateState: Map<string, Set<string>>
   storageAdapter: StorageAdapter
+  accountClient: AccountClient
 
-  workspaceId: WorkspaceId
+  wsIds: WorkspaceIds
 }
 
 /**

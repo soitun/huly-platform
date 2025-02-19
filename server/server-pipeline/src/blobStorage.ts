@@ -31,8 +31,9 @@ import {
   toFindResult,
   type Tx,
   type TxResult,
-  type WorkspaceId,
-  type Blob
+  type Blob,
+  type WorkspaceIds,
+  generateId
 } from '@hcengineering/core'
 import { PlatformError, unknownError } from '@hcengineering/platform'
 import {
@@ -44,7 +45,7 @@ import {
 
 class StorageBlobAdapter implements DbAdapter {
   constructor (
-    readonly workspaceId: WorkspaceId,
+    readonly storageIds: WorkspaceIds,
     readonly client: StorageAdapterEx, // Should not be closed
     readonly ctx: MeasureContext
   ) {}
@@ -62,7 +63,15 @@ class StorageBlobAdapter implements DbAdapter {
     }
   }
 
-  init?: ((ctx: MeasureContext, domains?: string[], excludeDomains?: string[]) => Promise<void>) | undefined
+  init?:
+  | ((
+    ctx: MeasureContext,
+    contextVars: Record<string, any>,
+    domains?: string[],
+    excludeDomains?: string[]
+  ) => Promise<void>)
+  | undefined
+
   on?: ((handler: DbAdapterHandler) => void) | undefined
 
   async rawFindAll<T extends Doc>(domain: Domain, query: DocumentQuery<T>, options?: FindOptions<T>): Promise<T[]> {
@@ -100,13 +109,13 @@ class StorageBlobAdapter implements DbAdapter {
   async close (): Promise<void> {}
 
   find (ctx: MeasureContext, domain: Domain): StorageIterator {
-    return this.client.find(ctx, this.workspaceId)
+    return this.client.find(ctx, this.storageIds)
   }
 
   async load (ctx: MeasureContext, domain: Domain, docs: Ref<Doc>[]): Promise<Doc[]> {
     const blobs: Blob[] = []
     for (const d of docs) {
-      const bb = await this.client.stat(ctx, this.workspaceId, d)
+      const bb = await this.client.stat(ctx, this.storageIds, d)
       if (bb !== undefined) {
         blobs.push(bb)
       }
@@ -114,12 +123,17 @@ class StorageBlobAdapter implements DbAdapter {
     return blobs
   }
 
+  getDomainHash (ctx: MeasureContext, domain: Domain): Promise<string> {
+    // TODO: Check if possible to ask storage if there any changes.
+    return Promise.resolve(generateId())
+  }
+
   async upload (ctx: MeasureContext, domain: Domain, docs: Doc[]): Promise<void> {
     // Nothing to do
   }
 
   async clean (ctx: MeasureContext, domain: Domain, docs: Ref<Doc>[]): Promise<void> {
-    await this.client.remove(this.ctx, this.workspaceId, docs)
+    await this.client.remove(this.ctx, this.storageIds, docs)
   }
 
   async update (ctx: MeasureContext, domain: Domain, operations: Map<Ref<Doc>, DocumentUpdate<Doc>>): Promise<void> {}
@@ -130,9 +144,10 @@ class StorageBlobAdapter implements DbAdapter {
  */
 export async function createStorageDataAdapter (
   ctx: MeasureContext,
+  contextVars: Record<string, any>,
   hierarchy: Hierarchy,
   url: string,
-  workspaceId: WorkspaceId,
+  wsIds: WorkspaceIds,
   modelDb: ModelDb,
   storage?: StorageAdapter
 ): Promise<DbAdapter> {
@@ -140,8 +155,8 @@ export async function createStorageDataAdapter (
     throw new Error('Storage adapter required')
   }
   // We need to create bucket if it doesn't exist
-  if (!(await storage.exists(ctx, workspaceId))) {
-    await storage.make(ctx, workspaceId)
+  if (!(await storage.exists(ctx, wsIds))) {
+    await storage.make(ctx, wsIds)
   }
-  return new StorageBlobAdapter(workspaceId, storage as StorageAdapterEx, ctx)
+  return new StorageBlobAdapter(wsIds, storage as StorageAdapterEx, ctx)
 }

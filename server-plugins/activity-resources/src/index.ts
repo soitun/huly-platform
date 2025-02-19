@@ -20,9 +20,8 @@ import activity, {
   DocUpdateMessage,
   Reaction
 } from '@hcengineering/activity'
-import { PersonAccount } from '@hcengineering/contact'
 import core, {
-  Account,
+  PersonId,
   AttachedDoc,
   Class,
   Collection,
@@ -139,15 +138,11 @@ export async function createReactionNotifications (tx: TxCUD<Reaction>, control:
   const docUpdateMessage = TxProcessor.createDoc2Doc(messageTx as TxCreateDoc<DocUpdateMessage>)
 
   res = res.concat(
-    await createCollabDocInfo(
-      control.ctx,
-      [user] as Ref<PersonAccount>[],
-      control,
-      tx,
-      parentMessage,
-      [docUpdateMessage],
-      { isOwn: true, isSpace: false, shouldUpdateTimestamp: false }
-    )
+    await createCollabDocInfo(control.ctx, res, [user], control, tx, parentMessage, [docUpdateMessage], {
+      isOwn: true,
+      isSpace: false,
+      shouldUpdateTimestamp: false
+    })
   )
 
   return res
@@ -168,7 +163,7 @@ function getDocUpdateMessageTx (
   originTx: TxCUD<Doc>,
   object: Doc,
   rawMessage: Data<DocUpdateMessage>,
-  modifiedBy?: Ref<Account>
+  modifiedBy?: PersonId
 ): TxCUD<DocUpdateMessage> {
   const { hierarchy } = control
   const space = isSpace(object, hierarchy) ? object._id : object.space
@@ -198,7 +193,7 @@ export async function pushDocUpdateMessages (
   res: TxCUD<DocUpdateMessage>[],
   object: Doc | undefined,
   originTx: TxCUD<Doc>,
-  modifiedBy?: Ref<Account>,
+  modifiedBy?: PersonId,
   objectCache?: DocObjectCache,
   controlRules?: ActivityMessageControl[]
 ): Promise<TxCUD<DocUpdateMessage>[]> {
@@ -280,7 +275,7 @@ export async function generateDocUpdateMessages (
   if (controlRules.length > 0) {
     for (const r of controlRules) {
       for (const s of r.skip) {
-        if (matchQuery([tx], s, r.objectClass, hierarchy).length > 0) {
+        if (matchQuery([tx], s, core.class.TxCUD, hierarchy).length > 0) {
           // Match found, we need to skip
           return res
         }
@@ -416,7 +411,7 @@ async function OnDocRemoved (txes: TxCUD<Doc>[], control: TriggerControl): Promi
 async function ReactionNotificationContentProvider (
   doc: ActivityMessage,
   originTx: TxCUD<Doc>,
-  _: Ref<Account>,
+  _: PersonId,
   control: TriggerControl
 ): Promise<NotificationContent> {
   const tx = originTx as TxCreateDoc<Reaction>

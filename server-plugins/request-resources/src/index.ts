@@ -14,17 +14,7 @@
 //
 
 import { DocUpdateMessage } from '@hcengineering/activity'
-import { PersonAccount } from '@hcengineering/contact'
-import core, {
-  Doc,
-  Ref,
-  Tx,
-  TxCUD,
-  TxCreateDoc,
-  TxProcessor,
-  TxUpdateDoc,
-  type MeasureContext
-} from '@hcengineering/core'
+import core, { Doc, Tx, TxCUD, TxCreateDoc, TxProcessor, TxUpdateDoc, type MeasureContext } from '@hcengineering/core'
 import notification from '@hcengineering/notification'
 import { getResource, translate } from '@hcengineering/platform'
 import request, { Request, RequestStatus } from '@hcengineering/request'
@@ -155,16 +145,14 @@ async function getRequestNotificationTx (
   const notifyContexts = await control.findAll(control.ctx, notification.class.DocNotifyContext, {
     objectId: doc._id
   })
-  const usersInfo = await getUsersInfo(control.ctx, [...collaborators, tx.modifiedBy] as Ref<PersonAccount>[], control)
+  const usersInfo = await getUsersInfo(control.ctx, [...collaborators, tx.modifiedBy], control)
   const senderInfo = usersInfo.get(tx.modifiedBy) ?? {
-    _id: tx.modifiedBy
+    _id: tx.modifiedBy,
+    socialStrings: []
   }
 
   const notificationControl = await getNotificationProviderControl(ctx, control)
-  const collaboratorsSet = new Set(collaborators)
-  const subscriptions = (await control.queryFind(control.ctx, notification.class.PushSubscription, {})).filter((it) =>
-    collaboratorsSet.has(it.user)
-  )
+
   for (const target of collaborators) {
     const targetInfo = toReceiverInfo(control.hierarchy, usersInfo.get(target))
     if (targetInfo === undefined) continue
@@ -179,8 +167,7 @@ async function getRequestNotificationTx (
       { isOwn: true, isSpace: false, shouldUpdateTimestamp: true },
       notifyContexts,
       messages,
-      notificationControl,
-      subscriptions
+      notificationControl
     )
     res.push(...txes)
   }

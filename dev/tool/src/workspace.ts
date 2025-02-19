@@ -14,27 +14,25 @@
 // limitations under the License.
 //
 
-import contact from '@hcengineering/contact'
 import core, {
   type BackupClient,
   type Class,
   type Client as CoreClient,
   type Doc,
-  DOMAIN_DOC_INDEX_STATE,
   DOMAIN_TX,
   type Ref,
   type Tx,
-  type WorkspaceId
+  type WorkspaceUuid
 } from '@hcengineering/core'
 import { getMongoClient, getWorkspaceMongoDB } from '@hcengineering/mongo'
 import { connect } from '@hcengineering/server-tool'
 import { generateModelDiff, printDiff } from './mdiff'
 
-export async function diffWorkspace (mongoUrl: string, workspace: WorkspaceId, rawTxes: Tx[]): Promise<void> {
+export async function diffWorkspace (mongoUrl: string, dbName: string, rawTxes: Tx[]): Promise<void> {
   const client = getMongoClient(mongoUrl)
   try {
     const _client = await client.getClient()
-    const db = getWorkspaceMongoDB(_client, workspace)
+    const db = getWorkspaceMongoDB(_client, dbName)
 
     console.log('diffing transactions...')
 
@@ -43,7 +41,7 @@ export async function diffWorkspace (mongoUrl: string, workspace: WorkspaceId, r
       .find<Tx>({
       objectSpace: core.space.Model,
       modifiedBy: core.account.System,
-      objectClass: { $ne: contact.class.PersonAccount }
+      objectClass: { $ne: 'contact:class:PersonAccount' } // Note: we may keep these transactions in old workspaces for history purposes
     })
       .toArray()
 
@@ -51,7 +49,7 @@ export async function diffWorkspace (mongoUrl: string, workspace: WorkspaceId, r
       return (
         tx.objectSpace === core.space.Model &&
         tx.modifiedBy === core.account.System &&
-        (tx as any).objectClass !== contact.class.PersonAccount
+        (tx as any).objectClass !== 'contact:class:PersonAccount'
       )
     })
 
@@ -73,7 +71,7 @@ export async function diffWorkspace (mongoUrl: string, workspace: WorkspaceId, r
 }
 
 export async function updateField (
-  workspaceId: WorkspaceId,
+  workspaceId: WorkspaceUuid,
   transactorUrl: string,
   cmd: { objectId: string, objectClass: string, type: string, attribute: string, value: string, domain: string }
 ): Promise<void> {
@@ -94,18 +92,5 @@ export async function updateField (
     await connection.upload(connection.getHierarchy().getDomain(doc?._class), [doc])
   } finally {
     await connection.close()
-  }
-}
-
-export async function recreateElastic (mongoUrl: string, workspaceId: WorkspaceId): Promise<void> {
-  const client = getMongoClient(mongoUrl)
-  const _client = await client.getClient()
-  try {
-    const db = getWorkspaceMongoDB(_client, workspaceId)
-    await db
-      .collection(DOMAIN_DOC_INDEX_STATE)
-      .updateMany({ _class: core.class.DocIndexState }, { $set: { needIndex: true } })
-  } finally {
-    client.close()
   }
 }

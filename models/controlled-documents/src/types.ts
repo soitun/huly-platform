@@ -30,7 +30,6 @@ import {
   type DocumentSpaceTypeDescriptor,
   type DocumentState,
   type DocumentTemplate,
-  type Sequence,
   type DocumentMeta,
   type ExternalSpace,
   type OrgSpace,
@@ -49,7 +48,6 @@ import {
   IndexKind,
   type Class,
   type MarkupBlobRef,
-  type Doc,
   type Domain,
   type Ref,
   type Timestamp,
@@ -57,9 +55,9 @@ import {
   type CollectionSize,
   type Role,
   type TypedSpace,
-  type Account,
   type RolesAssignment,
-  type Rank
+  type Rank,
+  type PersonId
 } from '@hcengineering/core'
 import {
   ArrOf,
@@ -459,12 +457,6 @@ export class TDocumentComment extends TChatMessage implements DocumentComment {
     index?: number
 }
 
-@Model(documents.class.Sequence, core.class.Doc, DOMAIN_DOCUMENTS)
-export class TSequence extends TDoc implements Sequence {
-  attachedTo!: Ref<Class<Doc>>
-  sequence!: number
-}
-
 @Model(documents.class.DocumentRequest, request.class.Request)
 @UX(documents.string.DocumentRequest)
 export class TDocumentRequest extends TRequest implements DocumentRequest {}
@@ -480,7 +472,7 @@ export class TDocumentApprovalRequest extends TDocumentRequest implements Docume
 @Mixin(documents.mixin.DocumentSpaceTypeData, documents.class.DocumentSpace)
 @UX(getEmbeddedLabel('Default Documents'), documents.icon.Document)
 export class TDocumentSpaceTypeData extends TDocumentSpace implements RolesAssignment {
-  [key: Ref<Role>]: Ref<Account>[]
+  [key: Ref<Role>]: PersonId[]
 }
 
 /**

@@ -14,11 +14,10 @@
 //
 
 import activity from '@hcengineering/activity'
-import type { Class, CollectionSize, MarkupBlobRef, Domain, Rank, Role, RolesAssignment } from '@hcengineering/core'
-import { Account, AccountRole, IndexKind, Ref } from '@hcengineering/core'
+import type { CollectionSize, MarkupBlobRef, Domain, Rank, Ref, Role, RolesAssignment } from '@hcengineering/core'
+import { PersonId, AccountRole, IndexKind } from '@hcengineering/core'
 import {
   type Document,
-  type DocumentEmbedding,
   type DocumentSnapshot,
   type SavedDocument,
   type Teamspace,
@@ -37,9 +36,10 @@ import {
   TypeNumber,
   TypeRef,
   TypeString,
+  TypePersonId,
   UX
 } from '@hcengineering/model'
-import attachment, { TAttachment } from '@hcengineering/model-attachment'
+import attachment from '@hcengineering/model-attachment'
 import chunter from '@hcengineering/model-chunter'
 import core, { TDoc, TTypedSpace } from '@hcengineering/model-core'
 import { createPublicLinkAction } from '@hcengineering/model-guest'
@@ -62,13 +62,6 @@ export { document as default }
 
 export const DOMAIN_DOCUMENT = 'document' as Domain
 
-@Model(document.class.DocumentEmbedding, attachment.class.Attachment)
-@UX(document.string.Embedding)
-export class TDocumentEmbedding extends TAttachment implements DocumentEmbedding {
-  declare attachedTo: Ref<Document>
-  declare attachedToClass: Ref<Class<Document>>
-}
-
 @Model(document.class.Document, core.class.Doc, DOMAIN_DOCUMENT)
 @UX(document.string.Document, document.icon.Document, undefined, 'name', undefined, document.string.Documents)
 export class TDocument extends TDoc implements Document, Todoable {
@@ -87,11 +80,11 @@ export class TDocument extends TDoc implements Document, Todoable {
   @Hidden()
   declare space: Ref<Teamspace>
 
-  @Prop(TypeRef(core.class.Account), document.string.LockedBy)
+  @Prop(TypePersonId(), document.string.LockedBy)
   @Hidden()
-    lockedBy?: Ref<Account>
+    lockedBy?: PersonId
 
-  @Prop(Collection(document.class.DocumentEmbedding), document.string.Embeddings)
+  @Prop(Collection(attachment.class.Embedding), attachment.string.Embeddings)
     embeddings?: number
 
   @Prop(Collection(attachment.class.Attachment), attachment.string.Attachments, { shortLabel: attachment.string.Files })
@@ -158,7 +151,7 @@ export class TTeamspace extends TTypedSpace implements Teamspace {}
 @Mixin(document.mixin.DefaultTeamspaceTypeData, document.class.Teamspace)
 @UX(getEmbeddedLabel('Default teamspace type'), document.icon.Document)
 export class TDefaultTeamspaceTypeData extends TTeamspace implements RolesAssignment {
-  [key: Ref<Role>]: Ref<Account>[]
+  [key: Ref<Role>]: PersonId[]
 }
 
 function defineTeamspace (builder: Builder): void {
@@ -217,8 +210,8 @@ function defineTeamspace (builder: Builder): void {
             key: 'hideArchived',
             type: 'toggle',
             defaultValue: true,
-            actionTarget: 'query',
-            action: document.function.HideArchivedTeamspaces,
+            actionTarget: 'options',
+            action: view.function.HideArchived,
             label: view.string.HideArchived
           }
         ]
@@ -278,7 +271,7 @@ function defineTeamspace (builder: Builder): void {
 }
 
 function defineDocument (builder: Builder): void {
-  builder.createModel(TDocument, TDocumentSnapshot, TDocumentEmbedding, TSavedDocument, TDefaultTeamspaceTypeData)
+  builder.createModel(TDocument, TDocumentSnapshot, TSavedDocument, TDefaultTeamspaceTypeData)
 
   builder.mixin(document.class.Document, core.class.Class, time.mixin.ItemPresenter, {
     presenter: document.component.DocumentToDoPresenter

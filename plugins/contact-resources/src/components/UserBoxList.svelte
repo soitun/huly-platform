@@ -37,7 +37,7 @@
   export let justify: 'left' | 'center' = 'center'
   export let width: string | undefined = undefined
   export let labelDirection: TooltipAlignment | undefined = undefined
-  export let emptyLabel: IntlString = plugin.string.Members
+  export let emptyLabel: IntlString = label ?? plugin.string.Members
   export let readonly: boolean = false
   export let create: ObjectCreate | undefined = undefined
 
@@ -57,12 +57,6 @@
   const dispatch = createEventDispatcher()
 
   async function addPerson (evt: Event): Promise<void> {
-    const accounts = new Set(
-      getClient()
-        .getModel()
-        .findAllSync(contact.class.PersonAccount, {})
-        .map((p) => p.person)
-    )
     const popupProps: any = {
       _class,
       label,
@@ -77,7 +71,7 @@
           const isSelected = items.some((selectedItem) => selectedItem === it._id)
           return isActive || isSelected
         }
-        return accounts.has(it._id as Ref<Person>)
+        return true // Previously it was cheching for PersonAccount to exist. Now we could check for any social id to exist?
       },
       readonly,
       create

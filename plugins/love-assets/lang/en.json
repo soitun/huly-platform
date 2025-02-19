@@ -81,6 +81,10 @@
     "Finished": "Finished",
     "StartWithRecording": "Start with recording",
     "Language": "Language",
-    "Kick": "Kick"
+    "Kick": "Kick",
+    "WithAudio": "Include system audio",
+    "ShareWithAudioTooltip": "Share your screen with system audio. Restart screen share to apply changes.",
+    "MicPermission": "Microphone not found, check browser permissions",
+    "CamPermission": "Camera not found, check browser permissions"
   }
 }

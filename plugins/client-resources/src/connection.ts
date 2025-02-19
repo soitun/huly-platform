@@ -47,7 +47,9 @@ import core, {
   clone,
   generateId,
   toFindResult,
-  type MeasureContext
+  type MeasureContext,
+  type PersonUuid,
+  type WorkspaceUuid
 } from '@hcengineering/core'
 import platform, {
   PlatformError,
@@ -87,6 +89,8 @@ class RequestPromise {
   chunks?: { index: number, data: FindResult<any> }[]
 }
 
+const globalRPCHandler: RPCHandler = new RPCHandler()
+
 class Connection implements ClientConnection {
   private websocket: ClientSocket | null = null
   binaryMode = false
@@ -115,7 +119,7 @@ class Connection implements ClientConnection {
 
   onConnect?: (event: ClientConnectEvent, lastTx: string | undefined, data: any) => Promise<void>
 
-  rpcHandler = new RPCHandler()
+  rpcHandler: RPCHandler
 
   lastHash?: string
 
@@ -123,8 +127,8 @@ class Connection implements ClientConnection {
     private readonly ctx: MeasureContext,
     private readonly url: string,
     private readonly handler: TxHandler,
-    readonly workspace: string,
-    readonly email: string,
+    readonly workspace: WorkspaceUuid,
+    readonly user: PersonUuid,
     readonly opt?: ClientFactoryOptions
   ) {
     if (typeof sessionStorage !== 'undefined') {
@@ -145,6 +149,7 @@ class Connection implements ClientConnection {
     } else {
       this.sessionId = generateId()
     }
+    this.rpcHandler = opt?.useGlobalRPCHandler === true ? globalRPCHandler : new RPCHandler()
 
     this.onConnect = opt?.onConnect
 
@@ -169,7 +174,7 @@ class Connection implements ClientConnection {
         // No ping response from server.
 
         if (this.websocket !== null) {
-          console.log('no ping response from server. Closing socket.', socketId, this.workspace, this.email)
+          console.log('no ping response from server. Closing socket.', socketId, this.workspace, this.user)
           clearInterval(this.interval)
           this.websocket.close(1000)
           return
@@ -187,6 +192,8 @@ class Connection implements ClientConnection {
               this.pingResponse = Date.now()
             }
           }
+        }).catch((err) => {
+          this.ctx.error('failed to send msg', { err })
         })
       } else {
         clearInterval(this.interval)
@@ -276,6 +283,9 @@ class Connection implements ClientConnection {
         if (resp.error?.code === platform.status.WorkspaceArchived) {
           this.opt?.onArchived?.()
         }
+        if (resp.error?.code === platform.status.WorkspaceMigration) {
+          this.opt?.onMigration?.()
+        }
       }
 
       if (resp.id !== undefined) {
@@ -336,7 +346,9 @@ class Connection implements ClientConnection {
           helloResp.reconnect === true ? ClientConnectEvent.Reconnected : ClientConnectEvent.Connected,
           helloResp.lastTx,
           this.sessionId
-        )
+        )?.catch((err) => {
+          this.ctx.error('failed to call onConnect', { err })
+        })
         this.schedulePing(socketId)
         return
       } else {
@@ -345,14 +357,16 @@ class Connection implements ClientConnection {
       return
     }
     if (resp.result === pingConst) {
-      void this.sendRequest({ method: pingConst, params: [] })
+      void this.sendRequest({ method: pingConst, params: [] }).catch((err) => {
+        this.ctx.error('failed to send ping', { err })
+      })
       return
     }
     if (resp.id !== undefined) {
       const promise = this.requests.get(resp.id)
       if (promise === undefined) {
         console.error(
-          new Error(`unknown response id: ${resp.id as string} ${this.workspace} ${this.email}`),
+          new Error(`unknown response id: ${resp.id as string} ${this.workspace} ${this.user}`),
           JSON.stringify(this.requests)
         )
         return
@@ -411,25 +425,32 @@ class Connection implements ClientConnection {
           'result: ',
           resp.result,
           this.workspace,
-          this.email
+          this.user
         )
         promise.reject(new PlatformError(resp.error))
       } else {
         if (request?.handleResult !== undefined) {
-          void request.handleResult(resp.result).then(() => {
-            promise.resolve(resp.result)
-          })
+          void request
+            .handleResult(resp.result)
+            .then(() => {
+              promise.resolve(resp.result)
+            })
+            .catch((err) => {
+              this.ctx.error('failed to handleResult', { err })
+            })
         } else {
           promise.resolve(resp.result)
         }
       }
-      void broadcastEvent(client.event.NetworkRequests, this.requests.size)
+      void broadcastEvent(client.event.NetworkRequests, this.requests.size).catch((err) => {
+        this.ctx.error('failed to broadcast', { err })
+      })
     } else {
       const txArr = Array.isArray(resp.result) ? (resp.result as Tx[]) : [resp.result as Tx]
 
       for (const tx of txArr) {
         if (tx?._class === core.class.TxModelUpgrade) {
-          console.log('Processing upgrade', this.workspace, this.email)
+          console.log('Processing upgrade', this.workspace, this.user)
           this.opt?.onUpgrade?.()
           return
         }
@@ -437,12 +458,33 @@ class Connection implements ClientConnection {
       this.handler(...txArr)
 
       clearTimeout(this.incomingTimer)
-      void broadcastEvent(client.event.NetworkRequests, this.requests.size + 1)
+      void broadcastEvent(client.event.NetworkRequests, this.requests.size + 1).catch((err) => {
+        this.ctx.error('failed to broadcast', { err })
+      })
 
       this.incomingTimer = setTimeout(() => {
-        void broadcastEvent(client.event.NetworkRequests, this.requests.size)
+        void broadcastEvent(client.event.NetworkRequests, this.requests.size).catch((err) => {
+          this.ctx.error('failed to broadcast', { err })
+        })
       }, 500)
     }
+  }
+
+  checkArrayBufferPing (data: ArrayBuffer): boolean {
+    if (data.byteLength === pingConst.length || data.byteLength === pongConst.length) {
+      const text = new TextDecoder().decode(data)
+      if (text === pingConst) {
+        void this.sendRequest({ method: pingConst, params: [] }).catch((err) => {
+          this.ctx.error('failed to send ping', { err })
+        })
+        return true
+      }
+      if (text === pongConst) {
+        this.pingResponse = Date.now()
+        return true
+      }
+    }
+    return false
   }
 
   private openConnection (ctx: MeasureContext, socketId: number): void {
@@ -476,7 +518,9 @@ class Connection implements ClientConnection {
       this.dialTimer = setTimeout(() => {
         this.dialTimer = null
         if (!opened && !this.closed) {
-          void this.opt?.onDialTimeout?.()
+          void this.opt?.onDialTimeout?.()?.catch((err) => {
+            this.ctx.error('failed to handle dial timeout', { err })
+          })
           this.scheduleOpen(this.ctx, true)
         }
       }, dialTimeout)
@@ -494,44 +538,45 @@ class Connection implements ClientConnection {
         return
       }
       if (event.data === pingConst) {
-        void this.sendRequest({ method: pingConst, params: [] })
+        void this.sendRequest({ method: pingConst, params: [] }).catch((err) => {
+          this.ctx.error('failed to send ping', { err })
+        })
         return
       }
-      if (
-        event.data instanceof ArrayBuffer &&
-        (event.data.byteLength === pingConst.length || event.data.byteLength === pongConst.length)
-      ) {
-        const text = new TextDecoder().decode(event.data)
-        if (text === pingConst) {
-          void this.sendRequest({ method: pingConst, params: [] })
-        }
-        if (text === pongConst) {
-          this.pingResponse = Date.now()
-        }
+      if (event.data instanceof ArrayBuffer && this.checkArrayBufferPing(event.data)) {
         return
       }
       if (event.data instanceof Blob) {
-        void event.data.arrayBuffer().then((data) => {
-          if (this.compressionMode && this.helloReceived) {
+        void event.data
+          .arrayBuffer()
+          .then((data) => {
+            if (this.checkArrayBufferPing(data)) {
+              // Support ping/pong
+              return
+            }
+            if (this.compressionMode && this.helloReceived) {
+              try {
+                data = uncompress(data)
+              } catch (err: any) {
+                // Ignore
+                console.error(err)
+              }
+            }
             try {
-              data = uncompress(data)
+              const resp = this.rpcHandler.readResponse<any>(data, this.binaryMode)
+              this.handleMsg(socketId, resp)
             } catch (err: any) {
-              // Ignore
-              console.error(err)
+              if (!this.helloReceived) {
+                // Just error and ignore for now.
+                console.error(err)
+              } else {
+                throw err
+              }
             }
-          }
-          try {
-            const resp = this.rpcHandler.readResponse<any>(data, this.binaryMode)
-            this.handleMsg(socketId, resp)
-          } catch (err: any) {
-            if (!this.helloReceived) {
-              // Just error and ignore for now.
-              console.error(err)
-            } else {
-              throw err
-            }
-          }
-        })
+          })
+          .catch((err) => {
+            this.ctx.error('failed to decode array buffer', { err })
+          })
       } else {
         let data = event.data
         if (this.compressionMode && this.helloReceived) {
@@ -561,7 +606,9 @@ class Connection implements ClientConnection {
         return
       }
       // console.log('client websocket closed', socketId, ev?.reason)
-      void broadcastEvent(client.event.NetworkRequests, -1)
+      void broadcastEvent(client.event.NetworkRequests, -1).catch((err) => {
+        this.ctx.error('failed broadcast', { err })
+      })
       this.scheduleOpen(this.ctx, true)
     }
     wsocket.onopen = () => {
@@ -589,9 +636,11 @@ class Connection implements ClientConnection {
         this.delay += 1
       }
       if (opened) {
-        console.error('client websocket error:', socketId, this.url, this.workspace, this.email)
+        console.error('client websocket error:', socketId, this.url, this.workspace, this.user)
       }
-      void broadcastEvent(client.event.NetworkRequests, -1)
+      void broadcastEvent(client.event.NetworkRequests, -1).catch((err) => {
+        this.ctx.error('failed to broadcast', { err })
+      })
     }
   }
 
@@ -669,7 +718,11 @@ class Connection implements ClientConnection {
       ctx.withSync('send-data', {}, () => {
         sendData()
       })
-      void ctx.with('broadcast-event', {}, () => broadcastEvent(client.event.NetworkRequests, this.requests.size))
+      void ctx
+        .with('broadcast-event', {}, () => broadcastEvent(client.event.NetworkRequests, this.requests.size))
+        .catch((err) => {
+          this.ctx.error('failed to broadcast', { err })
+        })
       if (data.method !== pingConst) {
         return await promise.promise
       }
@@ -763,6 +816,10 @@ class Connection implements ClientConnection {
     return this.sendRequest({ method: 'loadChunk', params: [domain, idx] })
   }
 
+  async getDomainHash (domain: Domain): Promise<string> {
+    return await this.sendRequest({ method: 'getDomainHash', params: [domain] })
+  }
+
   closeChunk (idx: number): Promise<void> {
     return this.sendRequest({ method: 'closeChunk', params: [idx] })
   }
@@ -794,8 +851,8 @@ class Connection implements ClientConnection {
 export function connect (
   url: string,
   handler: TxHandler,
-  workspace: string,
-  user: string,
+  workspace: WorkspaceUuid,
+  user: PersonUuid,
   opt?: ClientFactoryOptions
 ): ClientConnection {
   return new Connection(

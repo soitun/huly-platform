@@ -12,10 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import { type Attachment } from '@hcengineering/attachment'
-import contact, { Employee, type Person, type PersonAccount } from '@hcengineering/contact'
-import { type Class, type Doc, generateId, type Ref, type Space, type TxOperations } from '@hcengineering/core'
+import contact, { Employee, type Person } from '@hcengineering/contact'
+import {
+  buildSocialIdString,
+  type Class,
+  type Doc,
+  generateId,
+  PersonId,
+  type Ref,
+  SocialIdType,
+  type Space,
+  type TxOperations
+} from '@hcengineering/core'
 import document, { type Document } from '@hcengineering/document'
 import { MarkupMarkType, type MarkupNode, MarkupNodeType, traverseNode, traverseNodeMarks } from '@hcengineering/text'
 import tracker, { type Issue, Project } from '@hcengineering/tracker'
@@ -50,13 +60,13 @@ import documents, {
   DocumentMeta
 } from '@hcengineering/controlled-documents'
 
-interface UnifiedComment {
+export interface UnifiedComment {
   author: string
   text: string
   attachments?: string[]
 }
 
-interface UnifiedIssueHeader {
+export interface UnifiedIssueHeader {
   class: 'tracker:class:Issue'
   title: string
   status: string
@@ -67,7 +77,7 @@ interface UnifiedIssueHeader {
   comments?: UnifiedComment[]
 }
 
-interface UnifiedSpaceSettings {
+export interface UnifiedSpaceSettings {
   class: 'tracker:class:Project' | 'document:class:Teamspace' | 'documents:class:OrgSpace'
   title: string
   private?: boolean
@@ -79,7 +89,7 @@ interface UnifiedSpaceSettings {
   emoji?: string
 }
 
-interface UnifiedProjectSettings extends UnifiedSpaceSettings {
+export interface UnifiedProjectSettings extends UnifiedSpaceSettings {
   class: 'tracker:class:Project'
   identifier: string
   id?: 'tracker:project:DefaultProject'
@@ -87,16 +97,16 @@ interface UnifiedProjectSettings extends UnifiedSpaceSettings {
   defaultIssueStatus?: string
 }
 
-interface UnifiedTeamspaceSettings extends UnifiedSpaceSettings {
+export interface UnifiedTeamspaceSettings extends UnifiedSpaceSettings {
   class: 'document:class:Teamspace'
 }
 
-interface UnifiedDocumentHeader {
+export interface UnifiedDocumentHeader {
   class: 'document:class:Document'
   title: string
 }
 
-interface UnifiedWorkspaceSettings {
+export interface UnifiedWorkspaceSettings {
   projectTypes?: Array<{
     name: string
     taskTypes?: Array<{
@@ -110,13 +120,13 @@ interface UnifiedWorkspaceSettings {
   }>
 }
 
-interface UnifiedChangeControlHeader {
+export interface UnifiedChangeControlHeader {
   description?: string
   reason?: string
   impact?: string
 }
 
-interface UnifiedControlledDocumentHeader {
+export interface UnifiedControlledDocumentHeader {
   class: 'documents:class:ControlledDocument'
   title: string
   template: string
@@ -129,7 +139,7 @@ interface UnifiedControlledDocumentHeader {
   changeControl?: UnifiedChangeControlHeader
 }
 
-interface UnifiedDocumentTemplateHeader {
+export interface UnifiedDocumentTemplateHeader {
   class: 'documents:mixin:DocumentTemplate'
   title: string
   category: string
@@ -143,7 +153,7 @@ interface UnifiedDocumentTemplateHeader {
   changeControl?: UnifiedChangeControlHeader
 }
 
-interface UnifiedOrgSpaceSettings extends UnifiedSpaceSettings {
+export interface UnifiedOrgSpaceSettings extends UnifiedSpaceSettings {
   class: 'documents:class:OrgSpace'
   qualified?: string
   manager?: string
@@ -322,24 +332,26 @@ interface AttachmentMetadata {
 }
 
 export class UnifiedFormatImporter {
+  private readonly importerEmailPlaceholder = 'newuser@huly.io'
+  private readonly importerNamePlaceholder = 'New User'
   private readonly pathById = new Map<Ref<Doc>, string>()
   private readonly refMetaByPath = new Map<string, ReferenceMetadata>()
   private readonly fileMetaByPath = new Map<string, AttachmentMetadata>()
   private readonly ctrlDocTemplateIdByPath = new Map<string, Ref<ControlledDocument>>()
 
   private personsByName = new Map<string, Ref<Person>>()
-  private accountsByEmail = new Map<string, Ref<PersonAccount>>()
   private employeesByName = new Map<string, Ref<Employee>>()
 
   constructor (
     private readonly client: TxOperations,
     private readonly fileUploader: FileUploader,
-    private readonly logger: Logger
+    private readonly logger: Logger,
+    private readonly importerSocialId?: PersonId,
+    private readonly importerPerson?: Ref<Person>
   ) {}
 
   private async initCaches (): Promise<void> {
     await this.cachePersonsByNames()
-    await this.cacheAccountsByEmails()
     await this.cacheEmployeesByName()
   }
 
@@ -580,6 +592,10 @@ export class UnifiedFormatImporter {
     if (name === undefined) {
       return undefined
     }
+
+    if (name === this.importerNamePlaceholder && this.importerPerson != null) {
+      return this.importerPerson
+    }
     const person = this.personsByName.get(name)
     if (person === undefined) {
       throw new Error(`Person not found: ${name}`)
@@ -587,12 +603,12 @@ export class UnifiedFormatImporter {
     return person
   }
 
-  private findAccountByEmail (email: string): Ref<PersonAccount> {
-    const account = this.accountsByEmail.get(email)
-    if (account === undefined) {
-      throw new Error(`Account not found: ${email}`)
+  private getSocialIdByEmail (email: string): PersonId {
+    if (email === this.importerEmailPlaceholder && this.importerSocialId != null) {
+      return this.importerSocialId
     }
-    return account
+
+    return buildSocialIdString({ type: SocialIdType.EMAIL, value: email })
   }
 
   private findEmployeeByName (name: string): Ref<Employee> {
@@ -740,7 +756,7 @@ export class UnifiedFormatImporter {
         }
         return {
           text: comment.text,
-          author: this.findAccountByEmail(comment.author),
+          author: this.getSocialIdByEmail(comment.author),
           attachments
         }
       })
@@ -777,9 +793,9 @@ export class UnifiedFormatImporter {
       defaultIssueStatus:
         projectHeader.defaultIssueStatus !== undefined ? { name: projectHeader.defaultIssueStatus } : undefined,
       owners:
-        projectHeader.owners !== undefined ? projectHeader.owners.map((email) => this.findAccountByEmail(email)) : [],
+        projectHeader.owners !== undefined ? projectHeader.owners.map((email) => this.getSocialIdByEmail(email)) : [],
       members:
-        projectHeader.members !== undefined ? projectHeader.members.map((email) => this.findAccountByEmail(email)) : [],
+        projectHeader.members !== undefined ? projectHeader.members.map((email) => this.getSocialIdByEmail(email)) : [],
       docs: []
     }
   }
@@ -793,9 +809,9 @@ export class UnifiedFormatImporter {
       archived: spaceHeader.archived ?? false,
       description: spaceHeader.description,
       emoji: spaceHeader.emoji,
-      owners: spaceHeader.owners !== undefined ? spaceHeader.owners.map((email) => this.findAccountByEmail(email)) : [],
+      owners: spaceHeader.owners !== undefined ? spaceHeader.owners.map((email) => this.getSocialIdByEmail(email)) : [],
       members:
-        spaceHeader.members !== undefined ? spaceHeader.members.map((email) => this.findAccountByEmail(email)) : [],
+        spaceHeader.members !== undefined ? spaceHeader.members.map((email) => this.getSocialIdByEmail(email)) : [],
       docs: []
     }
   }
@@ -807,11 +823,11 @@ export class UnifiedFormatImporter {
       private: spaceHeader.private ?? false,
       archived: spaceHeader.archived ?? false,
       description: spaceHeader.description,
-      owners: spaceHeader.owners?.map((email) => this.findAccountByEmail(email)) ?? [],
-      members: spaceHeader.members?.map((email) => this.findAccountByEmail(email)) ?? [],
-      qualified: spaceHeader.qualified !== undefined ? this.findAccountByEmail(spaceHeader.qualified) : undefined,
-      manager: spaceHeader.manager !== undefined ? this.findAccountByEmail(spaceHeader.manager) : undefined,
-      qara: spaceHeader.qara !== undefined ? this.findAccountByEmail(spaceHeader.qara) : undefined,
+      owners: spaceHeader.owners?.map((email) => this.getSocialIdByEmail(email)) ?? [],
+      members: spaceHeader.members?.map((email) => this.getSocialIdByEmail(email)) ?? [],
+      qualified: spaceHeader.qualified !== undefined ? this.getSocialIdByEmail(spaceHeader.qualified) : undefined,
+      manager: spaceHeader.manager !== undefined ? this.getSocialIdByEmail(spaceHeader.manager) : undefined,
+      qara: spaceHeader.qara !== undefined ? this.getSocialIdByEmail(spaceHeader.qara) : undefined,
       docs: []
     }
   }
@@ -936,14 +952,6 @@ export class UnifiedFormatImporter {
         refByName.set(person.name, person._id)
         return refByName
       }, new Map())
-  }
-
-  private async cacheAccountsByEmails (): Promise<void> {
-    const accounts = await this.client.findAll(contact.class.PersonAccount, {})
-    this.accountsByEmail = accounts.reduce((map, account) => {
-      map.set(account.email, account._id)
-      return map
-    }, new Map())
   }
 
   private async cacheEmployeesByName (): Promise<void> {

@@ -137,7 +137,7 @@ export async function lockContent (doc: Document | Document[]): Promise<void> {
 
   const arr = Array.isArray(doc) ? doc : [doc]
   for (const doc of arr) {
-    await client.diffUpdate(doc, { lockedBy: me._id })
+    await client.diffUpdate(doc, { lockedBy: me.primarySocialId })
   }
 }
 
@@ -158,10 +158,6 @@ export async function canLockDocument (doc: Document | Document[]): Promise<bool
 export async function canUnlockDocument (doc: Document | Document[]): Promise<boolean> {
   const arr = Array.isArray(doc) ? doc : [doc]
   return arr.some((p) => p.lockedBy != null)
-}
-
-export function hideArchivedTeamspaces (value: boolean, query: DocumentQuery<Teamspace>): DocumentQuery<Teamspace> {
-  return value ? { ...query, archived: false } : query
 }
 
 export default async (): Promise<Resources> => ({
@@ -202,8 +198,7 @@ export default async (): Promise<Resources> => ({
     CanLockDocument: canLockDocument,
     CanUnlockDocument: canUnlockDocument,
     GetDocumentLinkId: getDocumentLinkId,
-    ParseDocumentId: parseDocumentId,
-    HideArchivedTeamspaces: hideArchivedTeamspaces
+    ParseDocumentId: parseDocumentId
   },
   resolver: {
     Location: resolveLocation

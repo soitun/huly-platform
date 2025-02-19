@@ -61,11 +61,22 @@ import RoleAssignmentEditor from './components/typeEditors/RoleAssignmentEditor.
 import StringTypeEditor from './components/typeEditors/StringTypeEditor.svelte'
 import WorkspaceSettings from './components/WorkspaceSettings.svelte'
 import SettingsWidget from './components/SettingsWidget.svelte'
+import ClassHierarchy from './components/ClassHierarchy.svelte'
+import CreateAttributePopup from './components/CreateAttributePopup.svelte'
+import CreateRelation from './components/CreateRelation.svelte'
+import EditRelation from './components/EditRelation.svelte'
 import setting from './plugin'
 import { filterDescendants, getOwnerFirstName, getOwnerLastName, getOwnerPosition, getValue } from './utils'
 
 export * from './store'
-export { ClassAttributes, ClassAttributesList, ClassSetting, filterDescendants, SpaceTypeGeneralSectionEditor }
+export {
+  ClassAttributes,
+  ClassAttributesList,
+  ClassSetting,
+  filterDescendants,
+  SpaceTypeGeneralSectionEditor,
+  ClassHierarchy
+}
 
 async function DeleteMixin (object: Mixin<Class<Doc>>): Promise<void> {
   const docs = await getClient().findAll(object._id, {}, { limit: 1 })
@@ -127,7 +138,10 @@ export default async (): Promise<Resources> => ({
     SpaceTypeRolesSectionEditor,
     RoleEditor,
     RoleAssignmentEditor,
-    SettingsWidget
+    SettingsWidget,
+    CreateAttributePopup,
+    CreateRelation,
+    EditRelation
   },
   actionImpl: {
     DeleteMixin

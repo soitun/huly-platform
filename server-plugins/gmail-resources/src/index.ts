@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-
-import contact, { Channel, formatName } from '@hcengineering/contact'
+/* eslint-disable @typescript-eslint/no-unused-vars */
+import contact, { Channel, formatName, Person } from '@hcengineering/contact'
 import {
-  Account,
+  PersonId,
   Class,
   concatLink,
   Doc,
@@ -40,6 +40,7 @@ import serverNotification, {
 import { getContentByTemplate } from '@hcengineering/server-notification-resources'
 import { getMetadata } from '@hcengineering/platform'
 import { ActivityMessage } from '@hcengineering/activity'
+import aiBot from '@hcengineering/ai-bot'
 
 /**
  * @public
@@ -94,7 +95,8 @@ export async function OnMessageCreate (txes: Tx[], control: TriggerControl): Pro
 export function IsIncomingMessageTypeMatch (
   tx: Tx,
   doc: Doc,
-  user: Ref<Account>,
+  person: Person,
+  user: PersonId[],
   type: NotificationType,
   control: TriggerControl
 ): boolean {
@@ -115,10 +117,13 @@ export async function sendEmailNotification (
       ctx.error('Please provide email service url to enable email notifications.')
       return
     }
+    const sesAuth: string | undefined = getMetadata(serverNotification.metadata.SesAuthToken)
     await fetch(concatLink(sesURL, '/send'), {
       method: 'post',
+      keepalive: true,
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        ...(sesAuth != null ? { Authorization: `Bearer ${sesAuth}` } : {})
       },
       body: JSON.stringify({
         text,
@@ -141,19 +146,17 @@ async function notifyByEmail (
   data: InboxNotification,
   message?: ActivityMessage
 ): Promise<void> {
-  const account = receiver.account
-
-  if (account === undefined) {
-    return
-  }
-
-  const senderPerson = sender.person
-  const senderName = senderPerson !== undefined ? formatName(senderPerson.name, control.branding?.lastNameFirst) : ''
-
-  const content = await getContentByTemplate(doc, senderName, type, control, '', data, message)
-  if (content !== undefined) {
-    await sendEmailNotification(control.ctx, content.text, content.html, content.subject, account.email)
-  }
+  // TODO: FIXME
+  // const account = receiver.account
+  // if (account === undefined) {
+  //   return
+  // }
+  // const senderPerson = sender.person
+  // const senderName = senderPerson !== undefined ? formatName(senderPerson.name, control.branding?.lastNameFirst) : ''
+  // const content = await getContentByTemplate(doc, senderName, type, control, '', data, message)
+  // if (content !== undefined) {
+  //   await sendEmailNotification(control.ctx, content.text, content.html, content.subject, account.email)
+  // }
 }
 
 const SendEmailNotifications: NotificationProviderFunc = async (
@@ -165,17 +168,22 @@ const SendEmailNotifications: NotificationProviderFunc = async (
   sender: SenderInfo,
   message?: ActivityMessage
 ): Promise<Tx[]> => {
-  if (types.length === 0) {
-    return []
-  }
+  // TODO: FIXME
+  // if (types.length === 0) {
+  //   return []
+  // }
 
-  if (!receiver.person.active) {
-    return []
-  }
+  // if (
+  //   !receiver.person.active ||
+  //   receiver.account._id === core.account.System ||
+  //   receiver.account._id === aiBot.account.AIBot
+  // ) {
+  //   return []
+  // }
 
-  for (const type of types) {
-    await notifyByEmail(control, type._id, object, sender, receiver, data, message)
-  }
+  // for (const type of types) {
+  //   await notifyByEmail(control, type._id, object, sender, receiver, data, message)
+  // }
 
   return []
 }

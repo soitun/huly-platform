@@ -15,19 +15,18 @@
 import core, {
   type Client,
   createClient,
-  generateId,
-  getWorkspaceId,
   Hierarchy,
   MeasureMetricsContext,
   ModelDb,
   type Ref,
   SortingOrder,
   type Space,
-  TxOperations
+  TxOperations,
+  type WorkspaceUuid
 } from '@hcengineering/core'
 import { type DbAdapter, wrapAdapterToClient } from '@hcengineering/server-core'
 import { createPostgresAdapter, createPostgresTxAdapter } from '..'
-import { getDBClient, type PostgresClientReference, shutdown } from '../utils'
+import { getDBClient, type PostgresClientReference, shutdownPostgres } from '../utils'
 import { genMinModel } from './minmodel'
 import { createTaskModel, type Task, type TaskComment, taskPlugin } from './tasks'
 
@@ -35,12 +34,13 @@ const txes = genMinModel()
 
 createTaskModel(txes)
 
+const contextVars: Record<string, any> = {}
+
 describe('postgres operations', () => {
-  const baseDbUri: string = process.env.DB_URL ?? 'postgresql://postgres:example@localhost:5433'
-  let dbId: string = 'pg_testdb_' + generateId()
-  let dbUuid: string = crypto.randomUUID()
-  let dbUri: string = baseDbUri + '/' + dbId
-  const clientRef: PostgresClientReference = getDBClient(baseDbUri)
+  const baseDbUri: string = process.env.DB_URL ?? 'postgresql://root@localhost:26257/defaultdb?sslmode=disable'
+  let dbUuid = crypto.randomUUID() as WorkspaceUuid
+  let dbUri: string = baseDbUri.replace('defaultdb', dbUuid)
+  const clientRef: PostgresClientReference = getDBClient(contextVars, baseDbUri)
   let hierarchy: Hierarchy
   let model: ModelDb
   let client: Client
@@ -49,19 +49,21 @@ describe('postgres operations', () => {
 
   afterAll(async () => {
     clientRef.close()
-    await shutdown()
+    await shutdownPostgres(contextVars)
   })
 
   beforeEach(async () => {
     try {
-      dbId = 'pg_testdb_' + generateId()
-      dbUuid = crypto.randomUUID()
-      dbUri = baseDbUri + '/' + dbId
+      dbUuid = crypto.randomUUID() as WorkspaceUuid
+      dbUri = baseDbUri.replace('defaultdb', dbUuid)
       const client = await clientRef.getClient()
-      await client`CREATE DATABASE ${client(dbId)}`
+      await client`CREATE DATABASE ${client(dbUuid)}`
     } catch (err) {
       console.error(err)
     }
+
+    jest.setTimeout(30000)
+    await initDb()
   })
 
   afterEach(async () => {
@@ -88,11 +90,12 @@ describe('postgres operations', () => {
     const mctx = new MeasureMetricsContext('', {})
     const txStorage = await createPostgresTxAdapter(
       mctx,
+      contextVars,
       hierarchy,
       dbUri,
       {
-        ...getWorkspaceId(dbId),
-        uuid: dbUuid
+        uuid: dbUuid,
+        url: dbUri
       },
       model
     )
@@ -107,26 +110,22 @@ describe('postgres operations', () => {
     const ctx = new MeasureMetricsContext('client', {})
     const serverStorage = await createPostgresAdapter(
       ctx,
+      contextVars,
       hierarchy,
       dbUri,
       {
-        ...getWorkspaceId(dbId),
-        uuid: dbUuid
+        uuid: dbUuid,
+        url: dbUri
       },
       model
     )
-    await serverStorage.init?.(ctx)
+    await serverStorage.init?.(ctx, contextVars)
     client = await createClient(async (handler) => {
       return wrapAdapterToClient(ctx, serverStorage, txes)
     })
 
     operations = new TxOperations(client, core.account.System)
   }
-
-  beforeEach(async () => {
-    jest.setTimeout(30000)
-    await initDb()
-  })
 
   it('check add', async () => {
     const times: number[] = []

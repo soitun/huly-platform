@@ -488,7 +488,8 @@ export class DocumentContentPage extends DocumentCommonPage {
     await this.page.getByRole('button', { name: 'AQ Admin Qara' }).click()
     await this.page.getByRole('button', { name: 'AJ Appleseed John' }).nth(1).click()
     await this.page.keyboard.press('Escape')
-    await this.page.getByRole('button', { name: 'Create' }).click()
+    await expect(this.page.locator('.selectPopup')).not.toBeAttached()
+    await this.page.getByRole('button', { name: 'Create' }).click({ timeout: 3000 })
   }
 
   async checkIfUserCanCreateDocument (spaceName: string): Promise<void> {
@@ -732,14 +733,14 @@ export class DocumentContentPage extends DocumentCommonPage {
     await this.confirmSubmission()
   }
 
-  async fillSelectApproversForm (approvers: Array<string>): Promise<void> {
+  async fillSelectApproversForm (approvers: Array<string>, skipConfirm: boolean = false): Promise<void> {
     await this.buttonAddMembers.click()
     for (const approver of approvers) {
       await this.selectListItemWithSearch(this.page, approver)
     }
     await this.textSelectApproversPopup.click({ force: true })
     await this.buttonSelectMemberSubmit.click()
-    await this.confirmSubmission()
+    if (!skipConfirm) await this.confirmSubmission()
   }
 
   async checkCurrentRights (right: DocumentRights): Promise<void> {

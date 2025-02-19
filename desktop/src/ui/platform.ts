@@ -33,7 +33,7 @@ import presence, { presenceId } from '@hcengineering/presence'
 import { recruitId } from '@hcengineering/recruit'
 import rekoni from '@hcengineering/rekoni'
 import { requestId } from '@hcengineering/request'
-import { settingId } from '@hcengineering/setting'
+import setting, { settingId } from '@hcengineering/setting'
 import { supportId } from '@hcengineering/support'
 import { tagsId } from '@hcengineering/tags'
 import { taskId } from '@hcengineering/task'
@@ -49,6 +49,7 @@ import { timeId } from '@hcengineering/time'
 import { desktopPreferencesId } from '@hcengineering/desktop-preferences'
 import guest, { guestId } from '@hcengineering/guest'
 import { bitrixId } from '@hcengineering/bitrix'
+import { cardId } from '@hcengineering/card'
 import { productsId } from '@hcengineering/products'
 import { questionsId } from '@hcengineering/questions'
 import { trainingId } from '@hcengineering/training'
@@ -56,6 +57,8 @@ import { documentsId } from '@hcengineering/controlled-documents'
 import aiBot, { aiBotId } from '@hcengineering/ai-bot'
 import { testManagementId } from '@hcengineering/test-management'
 import { surveyId } from '@hcengineering/survey'
+import { mySpaceId } from '@hcengineering/my-space'
+import { mailId } from '@hcengineering/mail'
 
 import '@hcengineering/activity-assets'
 import '@hcengineering/attachment-assets'
@@ -99,6 +102,8 @@ import '@hcengineering/analytics-collector-assets'
 import '@hcengineering/text-editor-assets'
 import '@hcengineering/test-management-assets'
 import '@hcengineering/survey-assets'
+import '@hcengineering/card-assets'
+import '@hcengineering/mail-assets'
 
 import { coreId } from '@hcengineering/core'
 import presentation, { parsePreviewConfig, parseUploadConfig, presentationId } from '@hcengineering/presentation'
@@ -192,6 +197,9 @@ function configureI18n (): void {
   addStringsLoader(analyticsCollectorId, async (lang: string) => await import(`@hcengineering/analytics-collector-assets/lang/${lang}.json`))
   addStringsLoader(testManagementId, async (lang: string) => await import(`@hcengineering/test-management-assets/lang/${lang}.json`))
   addStringsLoader(surveyId, async (lang: string) => await import(`@hcengineering/survey-assets/lang/${lang}.json`))
+  addStringsLoader(cardId, async (lang: string) => await import(`@hcengineering/card-assets/lang/${lang}.json`))
+  addStringsLoader(mySpaceId, async (lang: string) => await import(`@hcengineering/my-space-assets/lang/${lang}.json`))
+  addStringsLoader(mailId, async (lang: string) => await import(`@hcengineering/mail-assets/lang/${lang}.json`))
 }
 
 export async function configurePlatform (): Promise<void> {
@@ -318,6 +326,8 @@ export async function configurePlatform (): Promise<void> {
   addLocation(textEditorId, () => import(/* webpackChunkName: "text-editor" */ '@hcengineering/text-editor-resources'))
   addLocation(testManagementId, () => import(/* webpackChunkName: "test-management" */ '@hcengineering/test-management-resources'))
   addLocation(surveyId, () => import(/* webpackChunkName: "survey" */ '@hcengineering/survey-resources'))
+  addLocation(cardId, () => import(/* webpackChunkName: "card" */ '@hcengineering/card-resources'))
+  addLocation(mySpaceId, () => import(/* webpackChunkName: "card" */ '@hcengineering/my-space-resources'))
 
   setMetadata(client.metadata.FilterModel, 'ui')
   setMetadata(client.metadata.ExtraPlugins, ['preference' as Plugin])
@@ -336,7 +346,7 @@ export async function configurePlatform (): Promise<void> {
 
   initThemeStore()
 
-  addEventListener(workbench.event.NotifyConnection, async (evt) => {
+  addEventListener(workbench.event.NotifyConnection, async () => {
     await ipcMain.setFrontCookie(
       config.FRONT_URL,
       presentation.metadata.Token.replaceAll(':', '-'),
@@ -345,6 +355,8 @@ export async function configurePlatform (): Promise<void> {
   })
 
   configureNotifications()
+
+  setMetadata(setting.metadata.BackupUrl, config.BACKUP_URL ?? '')
 
   if (config.INITIAL_URL !== '') {
     setLocationStorageKey('uberflow_child')

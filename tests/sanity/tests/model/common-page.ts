@@ -8,6 +8,7 @@ export class CommonPage {
     this.page = page
   }
 
+  appHeader = (): Locator => this.page.locator('.hulyNavPanel-header')
   selectPopupInput = (): Locator => this.page.locator('div.selectPopup input')
   selectPopupInputSearch = (): Locator => this.page.locator('div.popup input.search')
   selectPopupListItem = (name: string): Locator => this.page.locator('div.selectPopup div.list-item', { hasText: name })
@@ -141,6 +142,7 @@ export class CommonPage {
 
   async pressYesDeletePopup (page: Page): Promise<void> {
     await this.viewStringDeleteObjectButtonPrimary().click()
+    await expect(this.viewStringDeleteObjectButtonPrimary()).not.toBeVisible({ timeout: 1000 })
   }
 
   async addNewTagPopup (page: Page, title: string, description: string): Promise<void> {

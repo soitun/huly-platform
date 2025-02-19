@@ -13,9 +13,13 @@
 // limitations under the License.
 -->
 <script lang="ts">
+  import { aiBotEmailSocialId } from '@hcengineering/ai-bot'
+  import { personRefByPersonIdStore } from '@hcengineering/contact-resources'
+  import { Ref } from '@hcengineering/core'
+  import { RoomType, Room as TypeRoom } from '@hcengineering/love'
+  import { MessageBox } from '@hcengineering/presentation'
   import { ActionIcon, Scroller, showPopup } from '@hcengineering/ui'
   import view from '@hcengineering/view'
-  import { RoomType, Room as TypeRoom } from '@hcengineering/love'
   import {
     LocalParticipant,
     LocalTrackPublication,
@@ -28,19 +32,17 @@
     TrackPublication
   } from 'livekit-client'
   import { createEventDispatcher, onDestroy, onMount, tick } from 'svelte'
-  import { Ref } from '@hcengineering/core'
-  import { MessageBox } from '@hcengineering/presentation'
-  import { Person, PersonAccount } from '@hcengineering/contact'
-  import aiBot from '@hcengineering/ai-bot'
-  import { personIdByAccountId } from '@hcengineering/contact-resources'
 
   import love from '../plugin'
   import { currentRoom, infos, myInfo, myOffice } from '../stores'
   import {
     awaitConnect,
+    isCamAllowed,
     isCameraEnabled,
     isConnected,
+    isMicAllowed,
     isMicEnabled,
+    isShareWithSound,
     isSharingEnabled,
     leaveRoom,
     lk,
@@ -64,8 +66,7 @@
     isAgent: boolean
   }
 
-  let aiPersonId: Ref<Person> | undefined = undefined
-  $: aiPersonId = $personIdByAccountId.get(aiBot.account.AIBot as Ref<PersonAccount>)
+  $: aiPersonId = $personRefByPersonIdStore.get(aiBotEmailSocialId)
 
   const dispatch = createEventDispatcher()
 
@@ -289,7 +290,9 @@
 
   async function changeShare (): Promise<void> {
     if (!$isConnected) return
-    await setShare(!$isSharingEnabled)
+    const newValue = !$isSharingEnabled
+    const audio = newValue && $isShareWithSound
+    await setShare(newValue, audio)
   }
 
   $: dispatchFit($isSharingEnabled)
@@ -315,17 +318,21 @@
     <div class="flex-row-center flex-gap-2">
       <ActionIcon
         icon={!$isConnected ? love.icon.Mic : $isMicEnabled ? love.icon.MicEnabled : love.icon.MicDisabled}
-        label={$isMicEnabled ? love.string.Mute : love.string.UnMute}
+        label={!$isMicAllowed ? love.string.MicPermission : $isMicEnabled ? love.string.Mute : love.string.UnMute}
         size={'small'}
         action={changeMute}
-        disabled={!$isConnected}
+        disabled={!$isConnected || !$isMicAllowed}
       />
       <ActionIcon
         icon={!$isConnected ? love.icon.Cam : $isCameraEnabled ? love.icon.CamEnabled : love.icon.CamDisabled}
-        label={$isCameraEnabled ? love.string.StopVideo : love.string.StartVideo}
+        label={!$isCamAllowed
+          ? love.string.CamPermission
+          : $isCameraEnabled
+            ? love.string.StopVideo
+            : love.string.StartVideo}
         size={'small'}
         action={changeCam}
-        disabled={!$isConnected || !allowCam}
+        disabled={!$isConnected || !allowCam || !$isCamAllowed}
       />
       {#if $isConnected}
         <ActionIcon

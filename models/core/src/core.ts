@@ -14,13 +14,12 @@
 //
 
 import {
-  type Account,
+  type PersonId,
   type AnyAttribute,
   type ArrOf,
   type Association,
   type AttachedDoc,
   type Blob,
-  type Card,
   type Class,
   type ClassifierKind,
   type Collection,
@@ -43,7 +42,6 @@ import {
   type IndexingConfiguration,
   IndexKind,
   type Interface,
-  type MarkupBlobRef,
   type MigrationState,
   type Mixin,
   type Obj,
@@ -52,11 +50,13 @@ import {
   type RefTo,
   type Relation,
   type Space,
+  type Sequence,
   type Timestamp,
   type TransientConfiguration,
   type Type,
   type TypeAny,
-  type Version
+  type Version,
+  DOMAIN_SEQUENCE
 } from '@hcengineering/core'
 import {
   Hidden,
@@ -66,12 +66,12 @@ import {
   Prop,
   ReadOnly,
   TypeBoolean,
-  TypeCollaborativeDoc,
   TypeFileSize,
   TypeIntlString,
   TypeRef,
   TypeString,
   TypeTimestamp,
+  TypePersonId,
   UX
 } from '@hcengineering/model'
 import { getEmbeddedLabel, type IntlString, type Plugin } from '@hcengineering/platform'
@@ -103,34 +103,18 @@ export class TDoc extends TObj implements Doc {
   @Index(IndexKind.Indexed)
     modifiedOn!: Timestamp
 
-  @Prop(TypeRef(core.class.Account), core.string.ModifiedBy)
+  @Prop(TypePersonId(), core.string.ModifiedBy)
   @Index(IndexKind.Indexed)
-    modifiedBy!: Ref<Account>
+    modifiedBy!: PersonId
 
-  @Prop(TypeRef(core.class.Account), core.string.CreatedBy)
+  @Prop(TypePersonId(), core.string.CreatedBy)
   @Index(IndexKind.Indexed)
-    createdBy!: Ref<Account>
+    createdBy!: PersonId
 
   @Prop(TypeTimestamp(), core.string.CreatedDate)
   @ReadOnly()
   @Index(IndexKind.IndexedDsc)
     createdOn!: Timestamp
-}
-
-@Model(core.class.Card, core.class.Doc)
-@UX(core.string.Object)
-export class TCard extends TDoc implements Card {
-  @Prop(TypeString(), core.string.Name)
-    title!: string
-
-  @Prop(TypeCollaborativeDoc(), core.string.Description)
-    description!: MarkupBlobRef | null
-
-  @Prop(TypeString(), core.string.Id)
-    identifier?: string | undefined
-
-  @Prop(TypeRef(core.class.Card), core.string.AttachedTo)
-    parent?: Ref<Card> | null
 }
 
 @Model(core.class.AttachedDoc, core.class.Doc)
@@ -277,6 +261,10 @@ export class TTypeFileSize extends TType {}
 @Model(core.class.TypeMarkup, core.class.Type)
 export class TTypeMarkup extends TType {}
 
+@UX(core.string.PersonId)
+@Model(core.class.TypePersonId, core.class.Type)
+export class TTypePersonId extends TType {}
+
 @UX(core.string.Ref)
 @Model(core.class.RefTo, core.class.Type)
 export class TRefTo extends TType implements RefTo<Doc> {
@@ -406,4 +394,13 @@ export class TTypeRank extends TType {}
 export class TTransientConfiguration extends TClass implements TransientConfiguration {
   @Prop(TypeBoolean(), core.string.Private)
     broadcastOnly!: boolean
+}
+
+@Model(core.class.Sequence, core.class.Doc, DOMAIN_SEQUENCE)
+export class TSequence extends TDoc implements Sequence {
+  @Prop(TypeRef(core.class.Class), core.string.AttachedTo)
+  @Index(IndexKind.Indexed)
+    attachedTo!: Ref<Class<Doc>>
+
+  sequence!: number
 }

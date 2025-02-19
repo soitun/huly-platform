@@ -7,11 +7,11 @@ import {
   DOMAIN_TX,
   Hierarchy,
   ModelDb,
-  systemAccountEmail,
+  systemAccountUuid,
   type Branding,
   type MeasureContext,
   type Tx,
-  type WorkspaceIdWithUrl
+  type WorkspaceIds
 } from '@hcengineering/core'
 import {
   ApplyTxMiddleware,
@@ -61,7 +61,7 @@ import { createStorageDataAdapter } from './blobStorage'
 export function getTxAdapterFactory (
   metrics: MeasureContext,
   dbUrl: string,
-  workspace: WorkspaceIdWithUrl,
+  workspace: WorkspaceIds,
   branding: Branding | null,
   opt: {
     disableTriggers?: boolean
@@ -78,6 +78,12 @@ export function getTxAdapterFactory (
 }
 
 /**
+ * A pipelice context used by standalong services to hold global variables.
+ * In case of Durable Objects, it should not be shared and individual context should be created.
+ */
+export const sharedPipelineContextVars: Record<string, any> = {}
+
+/**
  * @public
  */
 
@@ -92,6 +98,9 @@ export function createServerPipeline (
     adapterSecurity?: boolean
 
     externalStorage: StorageAdapter
+
+    extraLogging?: boolean // If passed, will log every request/etc.
+    pipelineContextVars?: Record<string, any>
   },
   extensions?: Partial<DbConfiguration>
 ): PipelineFactory {
@@ -115,7 +124,7 @@ export function createServerPipeline (
       TxMiddleware.create, // Store tx into transaction domain
       ...(opt.disableTriggers === true ? [] : [TriggersMiddleware.create]),
       ...(opt.fulltextUrl !== undefined
-        ? [FullTextMiddleware.create(opt.fulltextUrl, generateToken(systemAccountEmail, workspace))]
+        ? [FullTextMiddleware.create(opt.fulltextUrl, generateToken(systemAccountUuid, workspace.uuid))]
         : []),
       LowLevelMiddleware.create,
       QueryJoinMiddleware.create,
@@ -135,7 +144,8 @@ export function createServerPipeline (
       branding,
       modelDb,
       hierarchy,
-      storageAdapter: opt.externalStorage
+      storageAdapter: opt.externalStorage,
+      contextVars: opt.pipelineContextVars ?? sharedPipelineContextVars
     }
     return createPipeline(ctx, middlewares, context)
   }
@@ -181,7 +191,8 @@ export function createBackupPipeline (
       branding,
       modelDb,
       hierarchy,
-      storageAdapter: opt.externalStorage
+      storageAdapter: opt.externalStorage,
+      contextVars: {}
     }
     return createPipeline(ctx, middlewares, context)
   }
@@ -191,7 +202,7 @@ export async function getServerPipeline (
   ctx: MeasureContext,
   model: Tx[],
   dbUrl: string,
-  wsUrl: WorkspaceIdWithUrl,
+  wsUrl: WorkspaceIds,
   storageAdapter: StorageAdapter,
   opt?: {
     disableTriggers?: boolean
@@ -200,7 +211,8 @@ export async function getServerPipeline (
   const pipelineFactory = createServerPipeline(ctx, dbUrl, model, {
     externalStorage: storageAdapter,
     usePassedCtx: true,
-    disableTriggers: opt?.disableTriggers ?? false
+    disableTriggers: opt?.disableTriggers ?? false,
+    adapterSecurity: isAdapterSecurity(dbUrl)
   })
 
   return await pipelineFactory(ctx, wsUrl, true, () => {}, null)
@@ -209,6 +221,23 @@ export async function getServerPipeline (
 const txAdapterFactories: Record<string, DbAdapterFactory> = {}
 const adapterFactories: Record<string, DbAdapterFactory> = {}
 const destroyFactories: Record<string, (url: string) => WorkspaceDestroyAdapter> = {}
+const adapterSecurityState = new Set<string>()
+
+export function isAdapterSecurity (name: string): boolean {
+  for (const it of adapterSecurityState) {
+    if (name.startsWith(it)) {
+      return true
+    }
+  }
+  return false
+}
+export function setAdapterSecurity (name: string, state: boolean): void {
+  if (state) {
+    adapterSecurityState.add(name)
+  } else {
+    adapterSecurityState.delete(name)
+  }
+}
 
 export function registerTxAdapterFactory (name: string, factory: DbAdapterFactory, useAsDefault: boolean = true): void {
   txAdapterFactories[name] = factory
@@ -237,7 +266,7 @@ export function registerDestroyFactory (
 
 function matchTxAdapterFactory (dbUrl: string): DbAdapterFactory {
   for (const [k, v] of Object.entries(txAdapterFactories)) {
-    if (dbUrl.startsWith(k)) {
+    if (k !== '' && dbUrl.startsWith(k)) {
       return v
     }
   }
@@ -246,7 +275,7 @@ function matchTxAdapterFactory (dbUrl: string): DbAdapterFactory {
 
 function matchAdapterFactory (dbUrl: string): DbAdapterFactory {
   for (const [k, v] of Object.entries(adapterFactories)) {
-    if (dbUrl.startsWith(k)) {
+    if (k !== '' && dbUrl.startsWith(k)) {
       return v
     }
   }

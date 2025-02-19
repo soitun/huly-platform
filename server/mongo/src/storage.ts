@@ -29,6 +29,7 @@ import core, {
   toFindResult,
   withContext,
   type AssociationQuery,
+  type WorkspaceIds,
   type Class,
   type Doc,
   type DocInfo,
@@ -60,8 +61,7 @@ import core, {
   type TxRemoveDoc,
   type TxResult,
   type TxUpdateDoc,
-  type WithLookup,
-  type WorkspaceId
+  type WithLookup
 } from '@hcengineering/core'
 import {
   type DbAdapter,
@@ -69,7 +69,8 @@ import {
   type DomainHelperOperations,
   type ServerFindOptions,
   type StorageAdapter,
-  type TxAdapter
+  type TxAdapter,
+  calcHashHash
 } from '@hcengineering/server-core'
 import {
   type AbstractCursor,
@@ -1084,6 +1085,11 @@ abstract class MongoAdapterBase implements DbAdapter {
     return Date.now().toString(16) // Current hash value
   }
 
+  @withContext('get-domain-hash')
+  async getDomainHash (ctx: MeasureContext, domain: Domain): Promise<string> {
+    return await calcHashHash(ctx, domain, this)
+  }
+
   strimSize (str?: string): string {
     if (str == null) {
       return ''
@@ -1154,61 +1160,6 @@ abstract class MongoAdapterBase implements DbAdapter {
       const coll = this.collection(domain)
 
       return uploadDocuments(ctx, docs, coll, this.curHash())
-    })
-  }
-
-  update (ctx: MeasureContext, domain: Domain, operations: Map<Ref<Doc>, Partial<Doc>>): Promise<void> {
-    return ctx.with('update', { domain }, async () => {
-      const coll = this.collection(domain)
-
-      // remove old and insert new ones
-      const ops = Array.from(operations.entries())
-      let skip = 500
-      while (ops.length > 0) {
-        const part = ops.splice(0, skip)
-        try {
-          await ctx.with(
-            'bulk-update',
-            {},
-            () => {
-              return coll.bulkWrite(
-                part.map((it) => {
-                  const { $unset, ...set } = it[1] as any
-                  if ($unset !== undefined) {
-                    for (const k of Object.keys(set)) {
-                      if ($unset[k] === '') {
-                        // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
-                        delete $unset[k]
-                      }
-                    }
-                  }
-                  return {
-                    updateOne: {
-                      filter: { _id: it[0] },
-                      update: {
-                        $set: { ...set, '%hash%': this.curHash() },
-                        ...($unset !== undefined ? { $unset } : {})
-                      }
-                    }
-                  }
-                }),
-                {
-                  ordered: false
-                }
-              )
-            },
-            {
-              updates: part.length
-            }
-          )
-        } catch (err: any) {
-          ctx.error('failed on bulk write', { error: err, skip })
-          if (skip !== 1) {
-            ops.push(...part)
-            skip = 1 // Let's update one by one, to loose only one failed variant.
-          }
-        }
-      }
     })
   }
 
@@ -1673,7 +1624,7 @@ class MongoTxAdapter extends MongoAdapterBase implements TxAdapter {
     const systemTx: Tx[] = []
     const userTx: Tx[] = []
 
-    // Ignore Employee accounts.
+    // Ignore old Employee accounts.
     function isPersonAccount (tx: Tx): boolean {
       return (
         (tx._class === core.class.TxCreateDoc ||
@@ -1807,15 +1758,16 @@ function translateLikeQuery (pattern: string): { $regex: string, $options: strin
  */
 export async function createMongoAdapter (
   ctx: MeasureContext,
+  contextVars: Record<string, any>,
   hierarchy: Hierarchy,
   url: string,
-  workspaceId: WorkspaceId,
+  workspaceId: WorkspaceIds,
   modelDb: ModelDb,
   storage?: StorageAdapter,
   options?: DbAdapterOptions
 ): Promise<DbAdapter> {
   const client = getMongoClient(url)
-  const db = getWorkspaceMongoDB(await client.getClient(), workspaceId)
+  const db = getWorkspaceMongoDB(await client.getClient(), workspaceId.dataId ?? workspaceId.uuid)
 
   return new MongoAdapter(db, hierarchy, modelDb, client, options)
 }
@@ -1825,13 +1777,14 @@ export async function createMongoAdapter (
  */
 export async function createMongoTxAdapter (
   ctx: MeasureContext,
+  contextVars: Record<string, any>,
   hierarchy: Hierarchy,
   url: string,
-  workspaceId: WorkspaceId,
+  workspaceId: WorkspaceIds,
   modelDb: ModelDb
 ): Promise<TxAdapter> {
   const client = getMongoClient(url)
-  const db = getWorkspaceMongoDB(await client.getClient(), workspaceId)
+  const db = getWorkspaceMongoDB(await client.getClient(), workspaceId.dataId ?? workspaceId.uuid)
 
   return new MongoTxAdapter(db, hierarchy, modelDb, client)
 }

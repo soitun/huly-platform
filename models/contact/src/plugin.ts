@@ -39,8 +39,6 @@ export default mergeIds(contactId, contact, {
     OrganizationPresenter: '' as AnyComponent,
     Contacts: '' as AnyComponent,
     ContactsTabs: '' as AnyComponent,
-    PersonAccountPresenter: '' as AnyComponent,
-    PersonAccountRefPresenter: '' as AnyComponent,
     OrganizationEditor: '' as AnyComponent,
     EmployeePresenter: '' as AnyComponent,
     EmployeeRefPresenter: '' as AnyComponent,
@@ -59,7 +57,6 @@ export default mergeIds(contactId, contact, {
     ActivityChannelPresenter: '' as AnyComponent,
     EmployeeFilter: '' as AnyComponent,
     EmployeeFilterValuePresenter: '' as AnyComponent,
-    PersonAccountFilterValuePresenter: '' as AnyComponent,
     ChannelIcon: '' as AnyComponent
   },
   string: {
@@ -91,6 +88,8 @@ export default mergeIds(contactId, contact, {
     SkypePlaceholder: '' as IntlString,
     Profile: '' as IntlString,
     ProfilePlaceholder: '' as IntlString,
+    Viber: '' as IntlString,
+    ViberPlaceholder: '' as IntlString,
 
     CurrentEmployee: '' as IntlString,
 
